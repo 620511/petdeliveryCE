@@ -1,0 +1,15 @@
+{
+  "experimentalServices": {
+    "backend": {
+      "root": "backend",
+      "routePrefix": "/_/backend",
+      "buildCommand": "npm install && npx prisma generate"
+    },
+    "frontend": {
+      "root": "frontend",
+      "routePrefix": "/",
+      "framework": "vite",
+      "buildCommand": "npm install && npm run build"
+    }
+  }
+}
