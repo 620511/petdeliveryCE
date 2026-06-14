@@ -3,6 +3,7 @@
     "backend": {
       "root": "backend",
       "routePrefix": "/_/backend",
+      "framework": "express",
       "buildCommand": "npm install && npx prisma generate"
     },
     "frontend": {
@@ -13,3 +14,4 @@
     }
   }
 }
+  
