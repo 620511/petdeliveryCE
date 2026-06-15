@@ -24,7 +24,7 @@ async function main() {
       name: "Admin",
       email: "admin@petdelivery.com",
       passwordHash: hash,
-      role: "ADMIN",
+      role: "admin",
       phone: "(85) 99999-0000",
     }
   });
