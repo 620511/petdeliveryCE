@@ -24,7 +24,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }, // permite servir uploads cross-origin
 }));
 
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173")
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:5173,https://petdelivery-ce.vercel.app")
   .split(",").map((o) => o.trim());
 
 app.use(cors({
