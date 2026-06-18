@@ -54,7 +54,7 @@ const login = async (req, res) => {
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
 
   // Timing-safe: sempre compara hash mesmo se user não existir
-  const dummy = "$2b$12$invalidhashtopreventtimingattack000000000000";
+  const dummy ="$2a$12$0f6w8gL9G5P3VYl7Fv7Rze5B7n1hQ8aXxjN8v8jK2J5rP0vV4m8kS";
   const valid = user
     ? await bcrypt.compare(password, user.passwordHash)
     : await bcrypt.compare(password, dummy);
