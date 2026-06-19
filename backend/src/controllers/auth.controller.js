@@ -47,73 +47,8 @@ const register = async (req, res) => {
 
 // POST /api/auth/login
 const login = async (req, res) => {
-  const { email, password } = req.body;
-  if (!email?.trim() || !password)
-    return res.status(400).json({ error: "E-mail e senha são obrigatórios" });
-
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-
-  // Timing-safe: sempre compara hash mesmo se user não existir
-  const dummy ="$2a$12$0f6w8gL9G5P3VYl7Fv7Rze5B7n1hQ8aXxjN8v8jK2J5rP0vV4m8kS";
-  const valid = user
-    ? await bcrypt.compare(password, user.passwordHash)
-    : await bcrypt.compare(password, dummy);
-
-  if (!user || !valid) return res.status(401).json({ error: "Credenciais inválidas" });
-  if (!user.isActive)  return res.status(403).json({ error: "Conta desativada" });
-
-  await Promise.all([
-    prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } }),
-    prisma.refreshToken.deleteMany({ where: { userId: user.id, expiresAt: { lt: new Date() } } }),
-  ]);
-
-  const tokens = generateTokens(user);
-  await saveRefreshToken(user.id, tokens.refreshToken);
-
-  const { passwordHash, ...safeUser } = user;
-  res.json({ user: safeUser, ...tokens });
-};
-const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email?.trim() || !password)
-      return res.status(400).json({ error: "E-mail e senha são obrigatórios" });
-
-    console.log("1 - Recebeu requisição");
-
-    const user = await prisma.user.findUnique({
-      where: {
-        email: email.toLowerCase()
-      }
-    });
-
-    console.log("2 - Usuário encontrado:", !!user);
-
-    const dummy =
-      "$2a$12$0f6w8gL9G5P3VYl7Fv7Rze5B7n1hQ8aXxjN8v8jK2J5rP0vV4m8kS";
-
-    const valid = user
-      ? await bcrypt.compare(password, user.passwordHash)
-      : await bcrypt.compare(password, dummy);
-
-    console.log("3 - Senha validada");
-
-    if (!user || !valid)
-      return res.status(401).json({ error: "Credenciais inválidas" });
-
-    console.log("4 - Gerando tokens");
-
-    const tokens = generateTokens(user);
-
-    await saveRefreshToken(user.id, tokens.refreshToken);
-
-    console.log("5 - Login concluído");
-
-    const { passwordHash, ...safeUser } = user;
-
-    res.json({ user: safeUser, ...tokens });
-
+    ...
   } catch (err) {
     console.error("🔥 LOGIN ERROR:", err);
     return res.status(500).json({
