@@ -211,14 +211,14 @@ function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack,
 
   // FRETE DINÂMICO: calcula frete ao obter localização do cliente
   const calcFrete = async () => {
-    if (!store?.id) return;
+    if (!selStore?.id) return;
     setCalcLoading(true);
     try {
       // Tenta GPS do dispositivo
       const pos = await new Promise((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 })
       );
-      const { data } = await customerAPI.calcDeliveryFee(store.id, {
+      const { data } = await customerAPI.calcDeliveryFee(selStore.id, {
         customer_lat: pos.coords.latitude,
         customer_lng: pos.coords.longitude,
       });
@@ -230,7 +230,7 @@ function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack,
   };
 
   // Calcula ao entrar no carrinho
-  useState(() => { calcFrete(); }, [store?.id]);
+  useState(() => { calcFrete(); }, [selStore?.id]);
   if (!cart.length) return (
     <div style={G.screen}>
       <div style={G.header}><button onClick={onBack} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer" }}>←</button><span style={{ fontSize:16, fontWeight:800 }}>Carrinho</span><div style={{ width:30 }}/></div>
@@ -655,7 +655,7 @@ export default function CustomerApp() {
           {/* FASE 4: chat de atendimento ao cliente flutuante */}
           {/* Fase 2: banner de instalação PWA */}
           <PWAInstallBanner />
-          <CustomerChatWidget storeId={store?.id || null} />
+          <CustomerChatWidget storeId={selStore?.id || null} />
         </div>
       )}
     </div>
