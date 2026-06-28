@@ -1,6 +1,3 @@
-Coloque aqui os 3 ícones PWA:
- file:///C:/Users/george/Downloads/icon-192.png icon-192.png          (192x192)
- c:\Users\george\Downloads\icon-512.png icon-512.png          (512x512)
-  c:\Users\george\Downloadsicon-maskable-512.png (512x512 com safe area)
+Coloque aqui os 3 ícones 
 
 Gere em: https://www.pwabuilder.com/imageGenerator

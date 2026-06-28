@@ -230,7 +230,7 @@ function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack,
   };
 
   // Calcula ao entrar no carrinho
-  useState(() => { calcFrete(); }, [selStore?.id]);
+  useEffect(() => { calcFrete(); }, []);
   if (!cart.length) return (
     <div style={G.screen}>
       <div style={G.header}><button onClick={onBack} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer" }}>←</button><span style={{ fontSize:16, fontWeight:800 }}>Carrinho</span><div style={{ width:30 }}/></div>
