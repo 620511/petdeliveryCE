@@ -1,6 +1,5 @@
 // frontend/src/App.jsx
-// FIX: componentes auxiliares movidos para fora de AppRoutes (evita re-declaração)
-// FIX: Spinner, RoleRedirect, RequireRole agora são módulo-level
+// ATUALIZADO: rota /app é pública — cliente navega sem precisar de login
 
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -14,16 +13,16 @@ import AdminUsers     from "./pages/admin/Users";
 import AdminStores    from "./pages/admin/Stores";
 import AdminOrders    from "./pages/admin/Orders";
 import AdminReports   from "./pages/admin/Reports";
-import AdminPayouts   from "./pages/admin/Payouts";    // Fase 3
-import AdminAssistant from "./pages/admin/Assistant";  // FASE 4
+import AdminPayouts   from "./pages/admin/Payouts";
+import AdminAssistant from "./pages/admin/Assistant";
 
 import StoreDashboard from "./pages/store/Dashboard";
 import StoreProducts  from "./pages/store/Products";
 import StoreOrders    from "./pages/store/Orders";
 import StoreProfile   from "./pages/store/Profile";
-import StorePayouts   from "./pages/store/Payouts";    // Fase 3
-import StoreAssistant   from "./pages/store/Assistant";  // FASE 4
-import DeliveryZones   from "./pages/store/DeliveryZones"; // FRETE DINÂMICO
+import StorePayouts   from "./pages/store/Payouts";
+import StoreAssistant   from "./pages/store/Assistant";
+import DeliveryZones   from "./pages/store/DeliveryZones";
 
 import CustomerApp from "./pages/customer/App";
 
@@ -40,11 +39,12 @@ function Spinner() {
   );
 }
 
-// ── Redireciona para o painel correto conforme role ─────────────────
+// ── Redireciona conforme role (só para usuários logados) ────────────
 function RoleRedirect() {
   const { user, loading } = useAuth();
   if (loading) return <Spinner />;
-  if (!user)   return <Navigate to="/login" replace />;
+  // Sem login → vai direto para o app do cliente
+  if (!user) return <Navigate to="/app" replace />;
   if (user.role === "admin")       return <Navigate to="/admin" replace />;
   if (user.role === "store_owner") return <Navigate to="/store" replace />;
   return <Navigate to="/app" replace />;
@@ -85,8 +85,8 @@ function AppRoutes() {
         <Route path="stores"  element={<AdminStores />} />
         <Route path="orders"  element={<AdminOrders />} />
         <Route path="reports" element={<AdminReports />} />
-        <Route path="payouts"    element={<AdminPayouts />} />    {/* Fase 3 */}
-        <Route path="assistant"  element={<AdminAssistant />} />  {/* FASE 4 */}
+        <Route path="payouts"    element={<AdminPayouts />} />
+        <Route path="assistant"  element={<AdminAssistant />} />
       </Route>
 
       {/* ── LOJISTA ────────────────────────────────────────── */}
@@ -102,16 +102,16 @@ function AppRoutes() {
         <Route path="products" element={<StoreProducts />} />
         <Route path="orders"   element={<StoreOrders />} />
         <Route path="profile"  element={<StoreProfile />} />
-        <Route path="payouts"   element={<StorePayouts />} />    {/* Fase 3 */}
-        <Route path="assistant"      element={<StoreAssistant />} />  {/* FASE 4 */}
-        <Route path="delivery-zones" element={<DeliveryZones />} />   {/* FRETE DINÂMICO */}
+        <Route path="payouts"        element={<StorePayouts />} />
+        <Route path="assistant"      element={<StoreAssistant />} />
+        <Route path="delivery-zones" element={<DeliveryZones />} />
       </Route>
 
-      {/* ── CLIENTE ─────────────────────────────────────────── */}
+      {/* ── CLIENTE — ROTA PÚBLICA (sem login) ──────────────── */}
       <Route path="/app/*" element={<CustomerApp />} />
 
-      {/* 404 → redireciona para raiz */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* 404 → redireciona para o app */}
+      <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>
   );
 }

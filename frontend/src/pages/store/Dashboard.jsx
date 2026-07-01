@@ -1,5 +1,8 @@
 // frontend/src/pages/store/Dashboard.jsx
+// FIX: quando lojista não tem loja, mostra tela de configuração inicial
+
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { storeAPI } from "../../services/api";
 
 const C = { primary:"#F7931E", primaryDark:"#F15A24", white:"#fff", bg:"#FFF8F2", textDark:"#1E1E2E", textGray:"#6B7280", green:"#10B981", red:"#EF4444", blue:"#3B82F6" };
@@ -8,13 +11,20 @@ const STATUS_COLORS = { pending:"#F59E0B", confirmed:C.primary, preparing:C.blue
 const STATUS_LABELS = { pending:"⏳ Aguardando", confirmed:"✅ Confirmado", preparing:"👨‍🍳 Preparando", on_the_way:"🚴 A caminho", delivered:"📦 Entregue", cancelled:"❌ Cancelado" };
 
 export default function StoreDashboard() {
+  const navigate = useNavigate();
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(true);
+  const [noStore, setNoStore]     = useState(false);
   const [togglingOpen, setToggle] = useState(false);
 
   const load = () => {
     setLoading(true);
-    storeAPI.dashboard().then(({ data }) => setData(data)).finally(() => setLoading(false));
+    storeAPI.dashboard()
+      .then(({ data }) => setData(data))
+      .catch((err) => {
+        if (err.response?.status === 404) setNoStore(true);
+      })
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
@@ -29,7 +39,43 @@ export default function StoreDashboard() {
   };
 
   if (loading) return <div style={{ padding:32, color:C.textGray }}>Carregando...</div>;
-  if (!data)   return <div style={{ padding:32, color:C.red }}>Erro ao carregar</div>;
+
+  // Lojista sem loja configurada — mostra tela de boas-vindas
+  if (noStore) return (
+    <div style={{ padding:32, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"60vh", textAlign:"center" }}>
+      <div style={{ fontSize:72, marginBottom:16 }}>🏪</div>
+      <h2 style={{ fontSize:24, fontWeight:900, color:C.textDark, margin:"0 0 8px" }}>
+        Bem-vindo ao PetDelivery!
+      </h2>
+      <p style={{ fontSize:15, color:C.textGray, maxWidth:400, lineHeight:1.6, margin:"0 0 32px" }}>
+        Sua conta foi criada com sucesso! Agora configure sua loja para começar a vender. Preencha os dados básicos e aguarde a aprovação do admin.
+      </p>
+      <div style={{ background:`${C.primary}15`, borderRadius:16, padding:20, maxWidth:400, marginBottom:32, textAlign:"left" }}>
+        <div style={{ fontWeight:800, color:C.textDark, marginBottom:12 }}>📋 O que fazer agora:</div>
+        {[
+          "1️⃣ Configure o perfil da sua loja (nome, endereço, horário)",
+          "2️⃣ Aguarde a aprovação do administrador",
+          "3️⃣ Cadastre seus produtos",
+          "4️⃣ Comece a receber pedidos!",
+        ].map((s) => (
+          <div key={s} style={{ fontSize:13, color:C.textDark, marginBottom:8 }}>{s}</div>
+        ))}
+      </div>
+      <button
+        onClick={() => navigate("/store/profile")}
+        style={{
+          background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`,
+          color:C.white, border:"none", borderRadius:14,
+          padding:"14px 32px", fontSize:15, fontWeight:800,
+          cursor:"pointer", fontFamily:"inherit",
+        }}
+      >
+        ⚙️ Configurar minha loja agora
+      </button>
+    </div>
+  );
+
+  if (!data) return <div style={{ padding:32, color:C.red }}>Erro ao carregar</div>;
 
   const { store, stats, recentOrders, topProducts } = data;
 
@@ -50,6 +96,13 @@ export default function StoreDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Aviso se loja não aprovada ainda */}
+      {!store.isActive && (
+        <div style={{ background:"#FEF3C7", border:"1px solid #F59E0B", borderRadius:12, padding:"12px 18px", marginBottom:20, fontSize:13, color:"#92400E", fontWeight:600 }}>
+          ⏳ Sua loja está aguardando aprovação do administrador. Você já pode cadastrar produtos enquanto isso!
+        </div>
+      )}
 
       {/* Stats */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:14, marginBottom:24 }}>

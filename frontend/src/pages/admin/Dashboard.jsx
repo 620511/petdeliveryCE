@@ -1,5 +1,5 @@
 // frontend/src/pages/admin/Dashboard.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect } from "react"
 import { adminAPI } from "../../services/api";
 
 const C = { primary:"#F7931E", primaryDark:"#F15A24", white:"#fff", bg:"#F8F9FA", textDark:"#1E1E2E", textGray:"#6B7280", green:"#10B981", blue:"#3B82F6", purple:"#8B5CF6", red:"#EF4444" };

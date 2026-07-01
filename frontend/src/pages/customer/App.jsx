@@ -1,16 +1,17 @@
 // frontend/src/pages/customer/App.jsx
-// FASE 4: adicionado CustomerChatWidget (atendimento IA) e ProductRecommendations
+// ATUALIZADO: acesso livre sem login — cadastro/login é opcional no header
+// AGRO: filtros de segmento na tela de lojas (Pet, Agro, Jardim, Pecuária)
+// FASE 4: CustomerChatWidget + ProductRecommendations
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { customerAPI } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSocket } from "../../hooks/useSocket";
-import PWAInstallBanner from "../../components/shared/PWAInstallBanner"; // Fase 2
+import PWAInstallBanner from "../../components/shared/PWAInstallBanner";
 import CustomerChatWidget     from "../../components/ai/CustomerChatWidget";
 import ProductRecommendations from "../../components/ai/ProductRecommendations";
 
-// ── Colors & Styles ───────────────────────────────────────────────
 const C = {
   primary:"#F7931E", primaryDark:"#F15A24", dark:"#333",
   white:"#FFFFFF", bg:"#FFF8F2", card:"#FFFFFF",
@@ -25,53 +26,186 @@ const G = {
 };
 const fmt = (v) => Number(v).toLocaleString("pt-BR",{ style:"currency", currency:"BRL" });
 
+// Segmentos para filtro na tela de lojas
+const SEGMENTS = [
+  { id:"all",   label:"Todos",              emoji:"🏪", keywords:[] },
+  { id:"pet",   label:"Pet",                emoji:"🐶", keywords:["pet","animal","dog","gato","cachorro","felino"] },
+  { id:"agro",  label:"Agro",               emoji:"🐄", keywords:["agro","rural","fazenda","campo","bovino","equino"] },
+  { id:"jardim",label:"Jardim",             emoji:"🌱", keywords:["jardim","planta","flora","horta","garden"] },
+  { id:"pecu",  label:"Pecuária",           emoji:"🐔", keywords:["pecuária","avicultura","galinha","frango","suíno","porco"] },
+];
+
 function useWindowSize() {
   const [w, setW] = useState(window.innerWidth);
   useEffect(() => { const h = () => setW(window.innerWidth); window.addEventListener("resize",h); return ()=>window.removeEventListener("resize",h); },[]);
   return w;
 }
 
-// ── STATUS ────────────────────────────────────────────────────────
 const STATUS_COLORS = { pending:"#F59E0B", confirmed:C.primary, preparing:"#3B82F6", on_the_way:"#8B5CF6", delivered:C.green, cancelled:C.red };
 const STATUS_LABELS = { pending:"⏳ Aguardando confirmação", confirmed:"✅ Confirmado!", preparing:"👨‍🍳 Sendo preparado", on_the_way:"🚴 Saiu para entrega!", delivered:"📦 Entregue!", cancelled:"❌ Cancelado" };
 const STATUS_STEPS  = ["pending","confirmed","preparing","on_the_way","delivered"];
 
-// ── Store List ────────────────────────────────────────────────────
-function StoreListScreen({ onSelectStore, isDesktop }) {
-  const [stores, setStores]   = useState([]);
+function AppHeader({ user, onLoginClick, onLogout, rightSlot }) {
+  return (
+    <div style={G.header}>
+      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+        <span style={{ fontSize:26 }}>🐾</span>
+        <span style={{ fontSize:20, fontWeight:900, color:C.primary }}>Pet<span style={{ color:C.primaryDark }}>Delivery</span></span>
+      </div>
+      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+        {rightSlot}
+        {user ? (
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:13, color:C.textGray, fontWeight:600 }}>Olá, {user.name?.split(" ")[0]}</span>
+            <button onClick={onLogout} style={{ background:"transparent", border:`1.5px solid ${C.grayMid}`, borderRadius:10, padding:"5px 10px", fontSize:12, cursor:"pointer", color:C.textGray, fontFamily:"inherit" }}>Sair</button>
+          </div>
+        ) : (
+          <button onClick={onLoginClick} style={{ background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`, border:"none", borderRadius:10, padding:"7px 14px", fontSize:13, fontWeight:700, cursor:"pointer", color:C.white, fontFamily:"inherit" }}>
+            Entrar
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AuthModal({ onClose, onSuccess }) {
+  const { login, register } = useAuth();
+  const [tab,     setTab]     = useState("login");
+  const [name,    setName]    = useState("");
+  const [email,   setEmail]   = useState("");
+  const [phone,   setPhone]   = useState("");
+  const [pass,    setPass]    = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
+
+  const submit = async () => {
+    setError(""); setLoading(true);
+    try {
+      if (tab === "login") {
+        const u = await login(email, pass);
+        onSuccess(u);
+      } else {
+        const u = await register({ name, email, phone, password: pass });
+        onSuccess(u);
+      }
+    } catch (e) {
+      setError(e.response?.data?.error || "Erro. Tente novamente.");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:C.white, borderRadius:20, padding:28, width:"100%", maxWidth:380, boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display:"flex", gap:8, marginBottom:24 }}>
+          {["login","register"].map((t) => (
+            <button key={t} onClick={() => { setTab(t); setError(""); }}
+              style={{ flex:1, padding:"10px", borderRadius:12, border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:14,
+                background: tab===t ? `linear-gradient(135deg,${C.primary},${C.primaryDark})` : C.gray,
+                color: tab===t ? C.white : C.textDark }}>
+              {t === "login" ? "Entrar" : "Cadastrar"}
+            </button>
+          ))}
+        </div>
+        {tab === "register" && (
+          <>
+            <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="Seu nome"
+              style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10 }}/>
+            <input value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="Telefone (opcional)"
+              style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10 }}/>
+          </>
+        )}
+        <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="E-mail" type="email"
+          style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10 }}/>
+        <input value={pass} onChange={(e)=>setPass(e.target.value)} placeholder="Senha" type="password"
+          style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:16 }}/>
+        {error && <div style={{ color:C.red, fontSize:13, marginBottom:12, fontWeight:600 }}>{error}</div>}
+        <button onClick={submit} disabled={loading} style={{ ...G.btn, opacity: loading ? 0.8 : 1 }}>
+          {loading ? "⏳ Aguarde..." : tab === "login" ? "Entrar" : "Criar conta"}
+        </button>
+        <button onClick={onClose} style={{ width:"100%", marginTop:10, background:"transparent", border:"none", color:C.textGray, fontSize:13, cursor:"pointer", fontFamily:"inherit", padding:"8px" }}>
+          Continuar sem login
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Store List com filtros de segmento ────────────────────────────
+function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogout }) {
+  const [stores,  setStores]  = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch]   = useState("");
+  const [search,  setSearch]  = useState("");
+  const [segment, setSegment] = useState("all");
 
   useEffect(() => {
     setLoading(true);
-    customerAPI.stores(search ? { search } : {}).then(({ data }) => setStores(data)).finally(() => setLoading(false));
+    customerAPI.stores(search ? { search } : {})
+      .then(({ data }) => setStores(data))
+      .finally(() => setLoading(false));
   }, [search]);
+
+  // Filtra lojas pelo segmento selecionado (por nome/descrição)
+  const filtered = segment === "all" ? stores : stores.filter((s) => {
+    const seg = SEGMENTS.find((sg) => sg.id === segment);
+    if (!seg || !seg.keywords.length) return true;
+    const text = `${s.name} ${s.description || ""}`.toLowerCase();
+    return seg.keywords.some((kw) => text.includes(kw));
+  });
 
   return (
     <div style={{ ...G.screen, paddingBottom: isDesktop ? 40 : 80 }}>
-      <div style={G.header}>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:26 }}>🐾</span>
-          <span style={{ fontSize:20, fontWeight:900, color:C.primary }}>Pet<span style={{ color:C.primaryDark }}>Delivery</span></span>
-        </div>
-      </div>
+      <AppHeader user={user} onLoginClick={onLoginClick} onLogout={onLogout} />
       <div style={{ padding: isDesktop ? "24px 32px" : "16px" }}>
-        <div style={{ fontSize: isDesktop ? 24 : 20, fontWeight:900, color:C.textDark, marginBottom:16 }}>Escolha uma loja 🏪</div>
+        <div style={{ fontSize: isDesktop ? 24 : 20, fontWeight:900, color:C.textDark, marginBottom:12 }}>Escolha uma loja 🏪</div>
+
+        {/* Busca */}
         <input value={search} onChange={(e)=>setSearch(e.target.value)}
           placeholder="🔍 Buscar lojas..."
-          style={{ width:"100%", boxSizing:"border-box", padding:"12px 14px", borderRadius:14, border:`2px solid ${C.grayMid}`, fontSize:15, fontFamily:"inherit", outline:"none", marginBottom:20 }}/>
+          style={{ width:"100%", boxSizing:"border-box", padding:"12px 14px", borderRadius:14, border:`2px solid ${C.grayMid}`, fontSize:15, fontFamily:"inherit", outline:"none", marginBottom:12 }}/>
+
+        {/* Filtros de segmento */}
+        <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4, marginBottom:20 }}>
+          {SEGMENTS.map((seg) => {
+            const active = segment === seg.id;
+            return (
+              <button key={seg.id} onClick={() => setSegment(seg.id)}
+                style={{
+                  flexShrink:0, display:"flex", alignItems:"center", gap:6,
+                  padding:"8px 16px", borderRadius:20, border:"none", cursor:"pointer",
+                  fontFamily:"inherit", fontWeight:700, fontSize:13,
+                  background: active ? `linear-gradient(135deg,${C.primary},${C.primaryDark})` : C.white,
+                  color: active ? C.white : C.textDark,
+                  boxShadow: active ? `0 2px 8px rgba(247,147,30,0.3)` : "0 1px 4px rgba(0,0,0,0.08)",
+                  transition:"all .15s",
+                }}>
+                <span style={{ fontSize:16 }}>{seg.emoji}</span>
+                {seg.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Lista de lojas */}
         {loading ? (
           <div style={{ display:"grid", gap:12 }}>
             {Array(3).fill(0).map((_,i) => <div key={i} style={{ height:90, background:C.grayMid, borderRadius:16, animation:"pulse 1.5s infinite" }}/>)}
           </div>
-        ) : stores.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div style={{ textAlign:"center", padding:60, color:C.textGray }}>
-            <div style={{ fontSize:48 }}>🏪</div>
-            <div style={{ fontWeight:700, marginTop:12 }}>Nenhuma loja disponível</div>
+            <div style={{ fontSize:48 }}>{segment !== "all" ? SEGMENTS.find(s=>s.id===segment)?.emoji : "🏪"}</div>
+            <div style={{ fontWeight:700, marginTop:12 }}>
+              {segment !== "all" ? `Nenhuma loja de ${SEGMENTS.find(s=>s.id===segment)?.label} disponível` : "Nenhuma loja disponível"}
+            </div>
+            {segment !== "all" && (
+              <button onClick={() => setSegment("all")} style={{ marginTop:12, background:"transparent", border:`2px solid ${C.primary}`, borderRadius:10, padding:"8px 20px", color:C.primary, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                Ver todas as lojas
+              </button>
+            )}
           </div>
         ) : (
           <div style={{ display:"grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap:14 }}>
-            {stores.map((s) => (
+            {filtered.map((s) => (
               <div key={s.id}
                 onClick={() => s.is_open && onSelectStore(s)}
                 style={{ ...G.card, padding:18, cursor: s.is_open ? "pointer" : "default", opacity: s.is_open ? 1 : 0.6, transition:"transform .15s,box-shadow .15s" }}
@@ -108,8 +242,7 @@ function StoreListScreen({ onSelectStore, isDesktop }) {
   );
 }
 
-// ── Store Products ────────────────────────────────────────────────
-function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClick, isDesktop }) {
+function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClick, isDesktop, user, onLoginClick, onLogout }) {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [selCat,  setCat]     = useState(null);
@@ -119,6 +252,13 @@ function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClic
     const p = selCat ? { category_id: selCat } : {};
     customerAPI.storeProducts(store.id, p).then(({ data }) => setData(data)).finally(() => setLoading(false));
   }, [store.id, selCat]);
+
+  const cartBtn = (
+    <button onClick={onCartClick} style={{ background:C.gray, border:"none", borderRadius:12, padding:"7px 11px", cursor:"pointer", position:"relative", fontSize:20 }}>
+      🛒
+      {cartCount > 0 && <span style={{ position:"absolute", top:-4, right:-4, background:C.primaryDark, color:C.white, borderRadius:999, fontSize:11, fontWeight:800, minWidth:18, height:18, display:"flex", alignItems:"center", justifyContent:"center" }}>{cartCount}</span>}
+    </button>
+  );
 
   return (
     <div style={{ ...G.screen, paddingBottom: isDesktop ? 40 : 80 }}>
@@ -131,10 +271,10 @@ function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClic
           ) : null}
           <span style={{ fontSize:16, fontWeight:800 }}>{store.name}</span>
         </div>
-        <button onClick={onCartClick} style={{ background:C.gray, border:"none", borderRadius:12, padding:"7px 11px", cursor:"pointer", position:"relative", fontSize:20 }}>
-          🛒
-          {cartCount > 0 && <span style={{ position:"absolute", top:-4, right:-4, background:C.primaryDark, color:C.white, borderRadius:999, fontSize:11, fontWeight:800, minWidth:18, height:18, display:"flex", alignItems:"center", justifyContent:"center" }}>{cartCount}</span>}
-        </button>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          {cartBtn}
+          {!user && <button onClick={onLoginClick} style={{ background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`, border:"none", borderRadius:10, padding:"6px 12px", fontSize:12, fontWeight:700, cursor:"pointer", color:C.white, fontFamily:"inherit" }}>Entrar</button>}
+        </div>
       </div>
       {data?.categories?.length > 0 && (
         <div style={{ display:"flex", gap:8, padding:"10px 16px", overflowX:"auto", background:C.white, borderBottom:`1px solid ${C.gray}` }}>
@@ -160,23 +300,16 @@ function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClic
           <div style={{ textAlign:"center", padding:60, color:C.textGray }}><div style={{ fontSize:40, marginBottom:10 }}>🐾</div><div>Nenhum produto disponível</div></div>
         )}
       </div>
-      {/* FASE 4: recomendações IA — aparecem após a grid de produtos */}
       {!loading && data?.products?.length > 0 && (
-        <ProductRecommendations
-          storeId={store.id}
-          cartItems={[]} // passa itens do carrinho se disponível no contexto
-          onAddToCart={onAddToCart}
-        />
+        <ProductRecommendations storeId={store.id} cartItems={[]} onAddToCart={onAddToCart} />
       )}
     </div>
   );
 }
 
-// ── Product Card ──────────────────────────────────────────────────
 function ProductCard({ product:p, onAdd }) {
   const [added, setAdded] = useState(false);
   const handle = (e) => { e.stopPropagation(); setAdded(true); onAdd(); setTimeout(()=>setAdded(false),700); };
-
   return (
     <div style={{ ...G.card, padding:14, transition:"transform .15s,box-shadow .15s" }}
       onMouseEnter={(e) => { e.currentTarget.style.transform="translateY(-3px)"; e.currentTarget.style.boxShadow="0 8px 24px rgba(247,147,30,0.15)"; }}
@@ -201,42 +334,43 @@ function ProductCard({ product:p, onAdd }) {
   );
 }
 
-// ── Cart Screen ───────────────────────────────────────────────────
-function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack, onCheckout, isDesktop }) {
+function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack, onCheckout, isDesktop, user, onLoginClick }) {
   const [frete,       setFrete]       = useState(store?.delivery_fee ?? 8.9);
-  const [freteInfo,   setFreteInfo]   = useState(null); // { distance_km, out_of_range, free_above }
+  const [freteInfo,   setFreteInfo]   = useState(null);
   const [calcLoading, setCalcLoading] = useState(false);
   const freteOutOfRange = freteInfo?.out_of_range ?? false;
   const total = cartTotal + (freteInfo?.out_of_range ? 0 : frete);
 
-  // FRETE DINÂMICO: calcula frete ao obter localização do cliente
   const calcFrete = async () => {
-    if (!selStore?.id) return;
+    if (!store?.id) return;
     setCalcLoading(true);
     try {
-      // Tenta GPS do dispositivo
       const pos = await new Promise((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 })
       );
-      const { data } = await customerAPI.calcDeliveryFee(selStore.id, {
+      const { data } = await customerAPI.calcDeliveryFee(store.id, {
         customer_lat: pos.coords.latitude,
         customer_lng: pos.coords.longitude,
       });
       setFreteInfo(data);
       setFrete(data.out_of_range ? 0 : (data.fee ?? store.delivery_fee ?? 8.9));
-    } catch {
-      // GPS negado ou indisponível — mantém frete fixo da loja
-    } finally { setCalcLoading(false); }
+    } catch { } finally { setCalcLoading(false); }
   };
 
-  // Calcula ao entrar no carrinho
   useEffect(() => { calcFrete(); }, []);
+
+  const handleCheckout = () => {
+    if (!user) { onLoginClick(); return; }
+    onCheckout();
+  };
+
   if (!cart.length) return (
     <div style={G.screen}>
       <div style={G.header}><button onClick={onBack} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer" }}>←</button><span style={{ fontSize:16, fontWeight:800 }}>Carrinho</span><div style={{ width:30 }}/></div>
       <div style={{ textAlign:"center", padding:"80px 20px" }}><div style={{ fontSize:72 }}>🛒</div><div style={{ fontSize:18, fontWeight:800, marginTop:16 }}>Carrinho vazio</div><button style={{ ...G.btn, width:"auto", marginTop:20, padding:"12px 32px" }} onClick={onBack}>Continuar comprando</button></div>
     </div>
   );
+
   return (
     <div style={{ ...G.screen, paddingBottom: isDesktop ? 40 : 80 }}>
       <div style={G.header}><button onClick={onBack} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer" }}>←</button><span style={{ fontSize:16, fontWeight:800 }}>Carrinho ({cart.length})</span><div style={{ width:30 }}/></div>
@@ -265,12 +399,12 @@ function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack,
             <div style={{ ...G.card, padding:18, position: isDesktop ? "sticky" : "static", top:80 }}>
               <div style={{ fontWeight:800, fontSize:15, marginBottom:14 }}>Resumo</div>
               {[{ l:"Subtotal", v:fmt(cartTotal) },{ l:"Frete",
-              v: calcLoading ? "Calculando..." :
-                 freteInfo?.out_of_range ? "❌ Fora da área" :
-                 freteInfo?.distance_km  ? `${fmt(frete)} (${freteInfo.distance_km.toFixed(1)} km)` :
-                 frete === 0 ? "🆓 Grátis" : fmt(frete),
-              green: frete === 0 && !freteInfo?.out_of_range,
-              red:   freteInfo?.out_of_range }].map((r) => (
+                v: calcLoading ? "Calculando..." :
+                   freteInfo?.out_of_range ? "❌ Fora da área" :
+                   freteInfo?.distance_km  ? `${fmt(frete)} (${freteInfo.distance_km.toFixed(1)} km)` :
+                   frete === 0 ? "🆓 Grátis" : fmt(frete),
+                green: frete === 0 && !freteInfo?.out_of_range,
+                red:   freteInfo?.out_of_range }].map((r) => (
                 <div key={r.l} style={{ display:"flex", justifyContent:"space-between", marginBottom:10, fontSize:14 }}>
                   <span style={{ color:C.textGray }}>{r.l}</span><span style={{ fontWeight:700, color: r.green ? C.green : C.textDark }}>{r.v}</span>
                 </div>
@@ -279,11 +413,16 @@ function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack,
                 <span>Total</span><span style={{ color:C.primaryDark }}>{fmt(total)}</span>
               </div>
               {cartTotal < 99 && <div style={{ marginTop:10, fontSize:12, color:C.primary, fontWeight:700, textAlign:"center" }}>⚡ Faltam {fmt(99-cartTotal)} para frete grátis!</div>}
+              {!user && (
+                <div style={{ marginTop:12, background:`${C.primary}15`, borderRadius:10, padding:"10px 12px", fontSize:12, color:C.primaryDark, fontWeight:700, textAlign:"center" }}>
+                  Entre ou cadastre-se para finalizar o pedido
+                </div>
+              )}
               <button
-                style={{ ...G.btn, marginTop:16, opacity: freteOutOfRange ? 0.5 : 1, cursor: freteOutOfRange ? "not-allowed" : "pointer" }}
-                onClick={freteOutOfRange ? undefined : onCheckout}
+                style={{ ...G.btn, marginTop:12, opacity: freteOutOfRange ? 0.5 : 1, cursor: freteOutOfRange ? "not-allowed" : "pointer" }}
+                onClick={freteOutOfRange ? undefined : handleCheckout}
                 disabled={!!freteOutOfRange}>
-                {freteOutOfRange ? "❌ Fora da área de entrega" : `✅ Finalizar • ${fmt(total)}`}
+                {freteOutOfRange ? "❌ Fora da área de entrega" : !user ? "🔑 Entrar para finalizar" : `✅ Finalizar • ${fmt(total)}`}
               </button>
             </div>
           </div>
@@ -293,12 +432,11 @@ function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack,
   );
 }
 
-// ── Checkout Screen ───────────────────────────────────────────────
 function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }) {
   const [payment, setPayment] = useState("pix");
   const [address, setAddress] = useState("Rua das Flores, 123");
   const [placing, setPlacing] = useState(false);
-  const [done,    setDone]    = useState(null); // orderId após confirmação
+  const [done,    setDone]    = useState(null);
   const frete = cartTotal >= 99 ? 0 : (store?.delivery_fee ?? 8.9);
 
   const place = async () => {
@@ -308,7 +446,6 @@ function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }
         store_id: store.id, payment_method: payment, delivery_address: address,
         items: cart.map((i) => ({ product_id: i.id, quantity: i.qty })),
       });
-      // Fase 3: pagamento online MP
       if (payment === "mercadopago") {
         const { data: payData } = await customerAPI.createPayment(order.id);
         window.location.href = payData.checkout_url;
@@ -326,16 +463,15 @@ function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }
       <div style={{ fontSize:72 }}>🎉</div>
       <div style={{ fontSize:26, fontWeight:900, color:C.white }}>Pedido Confirmado!</div>
       <div style={{ fontSize:15, color:"rgba(255,255,255,0.85)" }}>Chegará em {store.delivery_time_min}–{store.delivery_time_max} minutos</div>
-      <div style={{ fontSize:13, color:"rgba(255,255,255,0.7)", marginTop:4 }}>Você receberá atualizações em tempo real 🔴</div>
     </div>
   );
 
   const payOpts = [
-    { id:"pix",         label:"PIX ⚡",          sub:"Imediato" },
-    { id:"credit_card", label:"Crédito 💳",       sub:"Até 12x" },
-    { id:"debit_card",  label:"Débito 🏦",        sub:"Rápido" },
-    { id:"cash",        label:"Dinheiro 💵",      sub:"Na entrega" },
-    { id:"mercadopago", label:"Mercado Pago 🛒",  sub:"Cartão, Pix, Saldo" }, // Fase 3
+    { id:"pix",         label:"PIX ⚡",         sub:"Imediato" },
+    { id:"credit_card", label:"Crédito 💳",      sub:"Até 12x" },
+    { id:"debit_card",  label:"Débito 🏦",       sub:"Rápido" },
+    { id:"cash",        label:"Dinheiro 💵",     sub:"Na entrega" },
+    { id:"mercadopago", label:"Mercado Pago 🛒", sub:"Cartão, Pix, Saldo" },
   ];
 
   return (
@@ -379,23 +515,17 @@ function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }
   );
 }
 
-// ── Order Tracking Screen — NOVO com Socket.io ────────────────────
 function OrderTrackingScreen({ orderId, onBack, isDesktop }) {
-  const [order, setOrder]   = useState(null);
+  const [order, setOrder]     = useState(null);
   const [loading, setLoading] = useState(true);
-  const { trackOrder, on }  = useSocket({ enabled: !!orderId });
+  const { trackOrder, on }    = useSocket({ enabled: !!orderId });
 
   useEffect(() => {
     if (!orderId) return;
     customerAPI.order(orderId).then(({ data }) => setOrder(data)).finally(() => setLoading(false));
   }, [orderId]);
 
-  // Entra na sala de rastreamento do pedido
-  useEffect(() => {
-    if (orderId) trackOrder(orderId);
-  }, [orderId, trackOrder]);
-
-  // Recebe atualizações em tempo real
+  useEffect(() => { if (orderId) trackOrder(orderId); }, [orderId, trackOrder]);
   useEffect(() => {
     const unsub = on("order:status", ({ orderId: id, status }) => {
       if (id === orderId) setOrder((o) => o ? { ...o, status } : o);
@@ -416,8 +546,6 @@ function OrderTrackingScreen({ orderId, onBack, isDesktop }) {
         <div style={{ width:30 }}/>
       </div>
       <div style={{ padding: isDesktop ? "24px 32px" : "16px" }}>
-
-        {/* Status atual */}
         <div style={{ ...G.card, padding:24, marginBottom:16, textAlign:"center", background:`linear-gradient(135deg,${C.bg},#FFEEDD)` }}>
           <div style={{ fontSize:52, marginBottom:12 }}>
             {order.status === "delivered" ? "🎉" : order.status === "cancelled" ? "😔" : "🔴"}
@@ -425,29 +553,20 @@ function OrderTrackingScreen({ orderId, onBack, isDesktop }) {
           <div style={{ fontSize:22, fontWeight:900, color: STATUS_COLORS[order.status] || C.textDark }}>
             {STATUS_LABELS[order.status] || order.status}
           </div>
-          <div style={{ fontSize:13, color:C.textGray, marginTop:6 }}>
-            {order.status !== "delivered" && order.status !== "cancelled"
-              ? "Atualização em tempo real 🔴"
-              : ""}
-          </div>
           {order.estimated_delivery_at && order.status !== "delivered" && order.status !== "cancelled" && (
             <div style={{ marginTop:10, fontSize:14, color:C.primary, fontWeight:700 }}>
               ⏱️ Previsão: {new Date(order.estimated_delivery_at).toLocaleTimeString("pt-BR",{ hour:"2-digit", minute:"2-digit" })}
             </div>
           )}
         </div>
-
-        {/* Barra de progresso */}
         {order.status !== "cancelled" && (
           <div style={{ ...G.card, padding:20, marginBottom:16 }}>
-            <div style={{ fontWeight:800, marginBottom:16, color:C.textDark }}>Progresso do Pedido</div>
+            <div style={{ fontWeight:800, marginBottom:16 }}>Progresso do Pedido</div>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", position:"relative" }}>
-              {/* Linha de fundo */}
               <div style={{ position:"absolute", top:"50%", left:0, right:0, height:3, background:C.gray, zIndex:0 }}/>
-              {/* Linha de progresso */}
               <div style={{ position:"absolute", top:"50%", left:0, height:3, background:`linear-gradient(90deg,${C.primary},${C.primaryDark})`, zIndex:1, transition:"width .5s", width: currentStep < 0 ? "0%" : `${(currentStep/(STATUS_STEPS.length-1))*100}%` }}/>
               {STATUS_STEPS.map((s, i) => {
-                const done    = i <= currentStep;
+                const done = i <= currentStep;
                 const current = i === currentStep;
                 return (
                   <div key={s} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, zIndex:2 }}>
@@ -463,8 +582,6 @@ function OrderTrackingScreen({ orderId, onBack, isDesktop }) {
             </div>
           </div>
         )}
-
-        {/* Detalhes do pedido */}
         <div style={{ ...G.card, padding:20, marginBottom:16 }}>
           <div style={{ fontWeight:800, marginBottom:12 }}>📦 Itens do Pedido</div>
           {(order.items||[]).map((i, idx) => (
@@ -477,7 +594,6 @@ function OrderTrackingScreen({ orderId, onBack, isDesktop }) {
             <span>Total</span><span style={{ color:C.primaryDark }}>{fmt(order.total)}</span>
           </div>
         </div>
-
         <div style={{ ...G.card, padding:16 }}>
           <div style={{ fontSize:13, color:C.textGray, marginBottom:4 }}>📍 {order.delivery_address}</div>
           <div style={{ fontSize:13, color:C.textGray }}>🏪 {order.store_name}</div>
@@ -487,21 +603,29 @@ function OrderTrackingScreen({ orderId, onBack, isDesktop }) {
   );
 }
 
-// ── Orders Screen ─────────────────────────────────────────────────
-function OrdersScreen({ onBack, onTrack, isDesktop }) {
+function OrdersScreen({ onBack, onTrack, isDesktop, user, onLoginClick }) {
   const [orders, setOrders]   = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) { setLoading(false); return; }
     customerAPI.orders().then(({ data }) => setOrders(data)).finally(() => setLoading(false));
-  }, []);
+  }, [user]);
 
   return (
     <div style={{ ...G.screen, paddingBottom: isDesktop ? 40 : 80 }}>
       <div style={G.header}><button onClick={onBack} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer" }}>←</button><span style={{ fontSize:16, fontWeight:800 }}>📦 Meus Pedidos</span><div style={{ width:30 }}/></div>
       <div style={{ padding: isDesktop ? "24px 32px" : "14px" }}>
-        {loading ? <div style={{ textAlign:"center", padding:48, color:C.textGray }}>Carregando...</div>
-        : !orders.length ? (
+        {!user ? (
+          <div style={{ textAlign:"center", padding:"60px 20px" }}>
+            <div style={{ fontSize:60 }}>🔑</div>
+            <div style={{ fontSize:18, fontWeight:800, marginTop:12, marginBottom:8 }}>Entre para ver seus pedidos</div>
+            <div style={{ fontSize:14, color:C.textGray, marginBottom:24 }}>Acompanhe seus pedidos em tempo real</div>
+            <button onClick={onLoginClick} style={{ ...G.btn, width:"auto", padding:"12px 32px" }}>Entrar / Cadastrar</button>
+          </div>
+        ) : loading ? (
+          <div style={{ textAlign:"center", padding:48, color:C.textGray }}>Carregando...</div>
+        ) : !orders.length ? (
           <div style={{ textAlign:"center", padding:60 }}><div style={{ fontSize:60 }}>📦</div><div style={{ fontSize:18, fontWeight:700, marginTop:12 }}>Nenhum pedido ainda</div></div>
         ) : (
           <div style={{ display:"grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap:14 }}>
@@ -537,7 +661,6 @@ function OrdersScreen({ onBack, onTrack, isDesktop }) {
   );
 }
 
-// ── Bottom Nav ────────────────────────────────────────────────────
 function BottomNav({ screen, onTab, cartCount }) {
   const tabs = [
     { id:"stores",  label:"Lojas",    icon:"🏠" },
@@ -562,19 +685,18 @@ function BottomNav({ screen, onTab, cartCount }) {
   );
 }
 
-// ── ROOT ──────────────────────────────────────────────────────────
 export default function CustomerApp() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const width    = useWindowSize();
+  const width     = useWindowSize();
   const isDesktop = width >= 768;
 
-  const [screen,    setScreen]    = useState("stores");
-  const [selStore,  setSelStore]  = useState(null);
-  const [trackingId,setTrackingId]= useState(null);
-  const [cart,      setCart]      = useState([]);
-  const [toast,     setToast]     = useState("");
-  const [freteInfo, setFreteInfo] = useState(null);
+  const [screen,     setScreen]     = useState("stores");
+  const [selStore,   setSelStore]   = useState(null);
+  const [trackingId, setTrackingId] = useState(null);
+  const [cart,       setCart]       = useState([]);
+  const [toast,      setToast]      = useState("");
+  const [showAuth,   setShowAuth]   = useState(false);
   const toastRef = useRef(null);
 
   const cartTotal = cart.reduce((s,i) => s+i.price*i.qty, 0);
@@ -597,36 +719,42 @@ export default function CustomerApp() {
   const removeOne  = (id) => setCart((prev) => { const it=prev.find((i)=>i.id===id); if(it?.qty>1) return prev.map((i)=>i.id===id?{...i,qty:i.qty-1}:i); return prev.filter((i)=>i.id!==id); });
   const deleteItem = (id) => setCart((prev) => prev.filter((i)=>i.id!==id));
 
-  const handleLogout = async () => { await logout(); navigate("/login"); };
+  const handleLogout = async () => { await logout(); };
+  const handleLoginClick = () => setShowAuth(true);
+  const handleAuthSuccess = (u) => {
+    setShowAuth(false);
+    showToast(`Bem-vindo, ${u.name?.split(" ")[0]}! 🎉`);
+    if (screen === "cart") setScreen("checkout");
+  };
 
   const goTab = (tab) => {
     if (tab==="cart") { setScreen("cart"); return; }
     setScreen(tab);
   };
 
-  const props = { isDesktop, cartCount, onCartClick:()=>setScreen("cart") };
+  const commonProps = { isDesktop, cartCount, user, onLoginClick: handleLoginClick, onLogout: handleLogout, onCartClick:()=>setScreen("cart") };
 
   const renderScreen = () => {
-    if (screen==="stores")   return <StoreListScreen onSelectStore={(s)=>{ setSelStore(s); setCart([]); setScreen("products"); }} {...props}/>;
-    if (screen==="products" && selStore) return <StoreProductsScreen store={selStore} onBack={()=>setScreen("stores")} onAddToCart={addToCart} {...props}/>;
-    if (screen==="cart")     return <CartScreen cart={cart} cartTotal={cartTotal} store={selStore} onAdd={addToCart} onRemove={removeOne} onDelete={deleteItem} onBack={()=>setScreen(selStore?"products":"stores")} onCheckout={()=>setScreen("checkout")} freteOutOfRange={freteInfo?.out_of_range} freteInfo={freteInfo} {...props}/>;
-    if (screen==="checkout" && selStore) return <CheckoutScreen cart={cart} store={selStore} cartTotal={cartTotal} onBack={()=>setScreen("cart")} onSuccess={(id)=>{ setCart([]); setTrackingId(id); setScreen("tracking"); }} {...props}/>;
-    if (screen==="tracking") return <OrderTrackingScreen orderId={trackingId} onBack={()=>setScreen("orders")} {...props}/>;
-    if (screen==="orders")   return <OrdersScreen onBack={()=>setScreen("stores")} onTrack={(id)=>{ setTrackingId(id); setScreen("tracking"); }} {...props}/>;
-    return <StoreListScreen onSelectStore={(s)=>{ setSelStore(s); setCart([]); setScreen("products"); }} {...props}/>;
+    if (screen==="stores")   return <StoreListScreen onSelectStore={(s)=>{ setSelStore(s); setCart([]); setScreen("products"); }} {...commonProps}/>;
+    if (screen==="products" && selStore) return <StoreProductsScreen store={selStore} onBack={()=>setScreen("stores")} onAddToCart={addToCart} {...commonProps}/>;
+    if (screen==="cart")     return <CartScreen cart={cart} cartTotal={cartTotal} store={selStore} onAdd={addToCart} onRemove={removeOne} onDelete={deleteItem} onBack={()=>setScreen(selStore?"products":"stores")} onCheckout={()=>setScreen("checkout")} {...commonProps}/>;
+    if (screen==="checkout" && selStore) return <CheckoutScreen cart={cart} store={selStore} cartTotal={cartTotal} onBack={()=>setScreen("cart")} onSuccess={(id)=>{ setCart([]); setTrackingId(id); setScreen("tracking"); }} {...commonProps}/>;
+    if (screen==="tracking") return <OrderTrackingScreen orderId={trackingId} onBack={()=>setScreen("orders")} {...commonProps}/>;
+    if (screen==="orders")   return <OrdersScreen onBack={()=>setScreen("stores")} onTrack={(id)=>{ setTrackingId(id); setScreen("tracking"); }} {...commonProps}/>;
+    return <StoreListScreen onSelectStore={(s)=>{ setSelStore(s); setCart([]); setScreen("products"); }} {...commonProps}/>;
   };
 
   return (
     <div style={{ fontFamily:"'Nunito','Segoe UI',sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box}body{margin:0}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} onSuccess={handleAuthSuccess} />}
       {toast && <div style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", background:C.dark, color:C.white, borderRadius:20, padding:"10px 20px", fontSize:13, fontWeight:700, zIndex:500, whiteSpace:"nowrap" }}>✓ {toast}</div>}
-
       {isDesktop ? (
         <div style={{ display:"flex", minHeight:"100vh" }}>
           <aside style={{ width:220, background:C.white, boxShadow:"2px 0 12px rgba(0,0,0,0.08)", position:"fixed", height:"100vh", display:"flex", flexDirection:"column", zIndex:100 }}>
             <div style={{ padding:"22px 18px 16px", borderBottom:`1px solid ${C.gray}` }}>
               <div style={{ fontSize:17, fontWeight:900, color:C.primary }}>🐾 PetDelivery</div>
-              <div style={{ fontSize:12, color:C.textGray }}>Olá, {user?.name?.split(" ")[0]}!</div>
+              <div style={{ fontSize:12, color:C.textGray }}>{user ? `Olá, ${user.name?.split(" ")[0]}!` : "Bem-vindo!"}</div>
             </div>
             <nav style={{ flex:1, padding:"14px 10px" }}>
               {[{ id:"stores",icon:"🏠",label:"Lojas" },{ id:"orders",icon:"📦",label:"Pedidos" }].map((t) => (
@@ -643,7 +771,11 @@ export default function CustomerApp() {
                   {cartCount>0 && <div style={{ fontSize:12, opacity:.9 }}>{fmt(cartTotal)}</div>}
                 </div>
               </button>
-              <button onClick={handleLogout} style={{ width:"100%", background:"transparent", border:"none", padding:"8px", color:C.textGray, fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>Sair →</button>
+              {user ? (
+                <button onClick={handleLogout} style={{ width:"100%", background:"transparent", border:"none", padding:"8px", color:C.textGray, fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>Sair →</button>
+              ) : (
+                <button onClick={handleLoginClick} style={{ ...G.btn, fontSize:13, padding:"10px" }}>Entrar / Cadastrar</button>
+              )}
             </div>
           </aside>
           <main style={{ marginLeft:220, flex:1 }}>{renderScreen()}</main>
@@ -652,8 +784,6 @@ export default function CustomerApp() {
         <div style={{ maxWidth:430, margin:"0 auto", minHeight:"100vh", background:C.bg, position:"relative" }}>
           {renderScreen()}
           {!["checkout","tracking"].includes(screen) && <BottomNav screen={screen} onTab={goTab} cartCount={cartCount}/>}
-          {/* FASE 4: chat de atendimento ao cliente flutuante */}
-          {/* Fase 2: banner de instalação PWA */}
           <PWAInstallBanner />
           <CustomerChatWidget storeId={selStore?.id || null} />
         </div>
