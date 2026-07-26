@@ -433,7 +433,7 @@ function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack,
 }
 
 function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }) {
-  const [payment, setPayment] = useState("pix");
+  const [payment, setPayment] = useState("mercadopago");
   const [address, setAddress] = useState("Rua das Flores, 123");
   const [placing, setPlacing] = useState(false);
   const [done,    setDone]    = useState(null);
@@ -467,10 +467,7 @@ function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }
   );
 
   const payOpts = [
-    { id:"pix",         label:"PIX ⚡",         sub:"Imediato" },
-    { id:"credit_card", label:"Crédito 💳",      sub:"Até 12x" },
-    { id:"debit_card",  label:"Débito 🏦",       sub:"Rápido" },
-    { id:"cash",        label:"Dinheiro 💵",     sub:"Na entrega" },
+    
     { id:"mercadopago", label:"Mercado Pago 🛒", sub:"Cartão, Pix, Saldo" },
   ];
 
