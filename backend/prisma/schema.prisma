@@ -29,6 +29,10 @@ enum OrderStatus {
 }
 
 enum PaymentMethod {
+  pix
+  credit_card
+  debit_card
+  cash
   mercadopago
 }
 
