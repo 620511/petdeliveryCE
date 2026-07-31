@@ -2,7 +2,7 @@
 // Componente reutilizável de upload de imagem
 
 import { useState, useRef } from "react";
-import api from "../../services/api";
+import api, { API_ORIGIN } from "../../services/api";
 
 const C = { primary:"#F7931E", white:"#fff", gray:"#F4F4F4", grayMid:"#E0E0E0", textGray:"#999", red:"#F44336", green:"#10B981" };
 
@@ -77,7 +77,7 @@ export default function ImageUpload({ value, onChange, label = "Imagem", placeho
         {preview ? (
           <>
             <img
-              src={preview.startsWith("/uploads") ? `http://localhost:3001${preview}` : preview}
+              src={preview.startsWith("/uploads") ? `${API_ORIGIN}${preview}` : preview}
               alt="Preview"
               style={{ width: "100%", height: 160, objectFit: "cover", display: "block" }}
               onError={() => setPreview("")}
