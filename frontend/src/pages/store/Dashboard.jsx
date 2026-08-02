@@ -1,5 +1,6 @@
 // frontend/src/pages/store/Dashboard.jsx
 // FIX: quando lojista não tem loja, mostra tela de configuração inicial
+// FIX: usa store.isOpen (camelCase) para bater com o retorno da API
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -33,8 +34,8 @@ export default function StoreDashboard() {
     if (!data) return;
     setToggle(true);
     try {
-      await storeAPI.updateProfile({ ...data.store, is_open: !data.store.is_open });
-      setData((d) => ({ ...d, store: { ...d.store, is_open: !d.store.is_open } }));
+      await storeAPI.updateProfile({ ...data.store, is_open: !data.store.isOpen });
+      setData((d) => ({ ...d, store: { ...d.store, isOpen: !d.store.isOpen } }));
     } finally { setToggle(false); }
   };
 
@@ -90,9 +91,9 @@ export default function StoreDashboard() {
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           <span style={{ fontSize:13, color:C.textGray, fontWeight:600 }}>Status da loja:</span>
           <button onClick={toggleOpen} disabled={togglingOpen}
-            style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 18px", borderRadius:12, border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:14, background: store.is_open ? "#D1FAE5" : "#FEE2E2", color: store.is_open ? C.green : C.red }}>
-            <span style={{ fontSize:18 }}>{store.is_open ? "🟢" : "🔴"}</span>
-            {togglingOpen ? "..." : store.is_open ? "Aberta — Fechar" : "Fechada — Abrir"}
+            style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 18px", borderRadius:12, border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:14, background: store.isOpen ? "#D1FAE5" : "#FEE2E2", color: store.isOpen ? C.green : C.red }}>
+            <span style={{ fontSize:18 }}>{store.isOpen ? "🟢" : "🔴"}</span>
+            {togglingOpen ? "..." : store.isOpen ? "Aberta — Fechar" : "Fechada — Abrir"}
           </button>
         </div>
       </div>

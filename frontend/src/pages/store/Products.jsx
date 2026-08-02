@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { storeAPI } from "../../services/api";
+import { API_ORIGIN } from "../../services/api";
 
 // Helper para gerar descrição via Gemini
 async function fetchAIDescription(name, emoji) {
@@ -125,7 +126,7 @@ export default function StoreProducts() {
             <div key={p.id} style={{ background:C.white, borderRadius:14, overflow:"hidden", boxShadow:"0 1px 8px rgba(0,0,0,0.06)", opacity: p.isActive ? 1 : 0.55 }}>
               {/* Imagem ou emoji */}
               {p.imageUrl ? (
-                <img src={p.imageUrl.startsWith("/uploads") ? `http://localhost:3001${p.imageUrl}` : p.imageUrl}
+                <img src={p.imageUrl.startsWith("/uploads") ? `${API_ORIGIN}${p.imageUrl}` : p.imageUrl}
                   alt={p.name} style={{ width:"100%", height:100, objectFit:"cover" }}
                   onError={(e) => { e.target.style.display = "none"; }} />
               ) : (
