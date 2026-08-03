@@ -1,6 +1,7 @@
 // frontend/src/pages/store/Products.jsx
 // ATUALIZADO: usa ImageUpload para fotos dos produtos
 // FASE 4: botão "Gerar com IA" na descrição do produto
+// FIX: usa API_ORIGIN (VITE_API_URL) em vez de localhost fixo nas imagens
 
 import { useState, useEffect, useCallback } from "react";
 import { storeAPI } from "../../services/api";
