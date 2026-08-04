@@ -2,10 +2,12 @@
 // ATUALIZADO: acesso livre sem login — cadastro/login é opcional no header
 // AGRO: filtros de segmento na tela de lojas (Pet, Agro, Jardim, Pecuária)
 // FASE 4: CustomerChatWidget + ProductRecommendations
+// FIX: usa API_ORIGIN (VITE_API_URL) em vez de localhost fixo nas imagens
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { customerAPI } from "../../services/api";
+import { API_ORIGIN } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSocket } from "../../hooks/useSocket";
 import PWAInstallBanner from "../../components/shared/PWAInstallBanner";
@@ -26,7 +28,6 @@ const G = {
 };
 const fmt = (v) => Number(v).toLocaleString("pt-BR",{ style:"currency", currency:"BRL" });
 
-// Segmentos para filtro na tela de lojas
 const SEGMENTS = [
   { id:"all",   label:"Todos",              emoji:"🏪", keywords:[] },
   { id:"pet",   label:"Pet",                emoji:"🐶", keywords:["pet","animal","dog","gato","cachorro","felino"] },
@@ -131,7 +132,6 @@ function AuthModal({ onClose, onSuccess }) {
   );
 }
 
-// ── Store List com filtros de segmento ────────────────────────────
 function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogout }) {
   const [stores,  setStores]  = useState([]);
   const [loading, setLoading] = useState(true);
@@ -145,7 +145,6 @@ function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogou
       .finally(() => setLoading(false));
   }, [search]);
 
-  // Filtra lojas pelo segmento selecionado (por nome/descrição)
   const filtered = segment === "all" ? stores : stores.filter((s) => {
     const seg = SEGMENTS.find((sg) => sg.id === segment);
     if (!seg || !seg.keywords.length) return true;
@@ -159,12 +158,10 @@ function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogou
       <div style={{ padding: isDesktop ? "24px 32px" : "16px" }}>
         <div style={{ fontSize: isDesktop ? 24 : 20, fontWeight:900, color:C.textDark, marginBottom:12 }}>Escolha uma loja 🏪</div>
 
-        {/* Busca */}
         <input value={search} onChange={(e)=>setSearch(e.target.value)}
           placeholder="🔍 Buscar lojas..."
           style={{ width:"100%", boxSizing:"border-box", padding:"12px 14px", borderRadius:14, border:`2px solid ${C.grayMid}`, fontSize:15, fontFamily:"inherit", outline:"none", marginBottom:12 }}/>
 
-        {/* Filtros de segmento */}
         <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4, marginBottom:20 }}>
           {SEGMENTS.map((seg) => {
             const active = segment === seg.id;
@@ -186,7 +183,6 @@ function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogou
           })}
         </div>
 
-        {/* Lista de lojas */}
         {loading ? (
           <div style={{ display:"grid", gap:12 }}>
             {Array(3).fill(0).map((_,i) => <div key={i} style={{ height:90, background:C.grayMid, borderRadius:16, animation:"pulse 1.5s infinite" }}/>)}
@@ -215,7 +211,7 @@ function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogou
                   <div style={{ flex:1 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
                       {s.logoUrl ? (
-                        <img src={s.logoUrl.startsWith("/uploads") ? `http://localhost:3001${s.logoUrl}` : s.logoUrl}
+                        <img src={s.logoUrl.startsWith("/uploads") ? `${API_ORIGIN}${s.logoUrl}` : s.logoUrl}
                           alt={s.name} style={{ width:36, height:36, borderRadius:8, objectFit:"cover" }}
                           onError={(e) => (e.target.style.display="none")} />
                       ) : <span style={{ fontSize:28 }}>🐾</span>}
@@ -266,7 +262,7 @@ function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClic
         <button onClick={onBack} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer" }}>←</button>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           {store.logoUrl ? (
-            <img src={store.logoUrl.startsWith("/uploads") ? `http://localhost:3001${store.logoUrl}` : store.logoUrl}
+            <img src={store.logoUrl.startsWith("/uploads") ? `${API_ORIGIN}${store.logoUrl}` : store.logoUrl}
               alt={store.name} style={{ width:28, height:28, borderRadius:6, objectFit:"cover" }}/>
           ) : null}
           <span style={{ fontSize:16, fontWeight:800 }}>{store.name}</span>
@@ -316,7 +312,7 @@ function ProductCard({ product:p, onAdd }) {
       onMouseLeave={(e) => { e.currentTarget.style.transform="none"; e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.06)"; }}>
       {p.image_url ? (
         <div style={{ width:"100%", aspectRatio:"1 / 1", borderRadius:10, marginBottom:10, overflow:"hidden", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <img src={p.image_url.startsWith("/uploads") ? `http://localhost:3001${p.image_url}` : p.image_url}
+          <img src={p.image_url.startsWith("/uploads") ? `${API_ORIGIN}${p.image_url}` : p.image_url}
             alt={p.name} style={{ width:"100%", height:"100%", objectFit:"contain" }}
             onError={(e) => { e.target.parentElement.innerHTML = `<span style="font-size:44px">${p.emoji||"🐾"}</span>`; }}/>
         </div>
