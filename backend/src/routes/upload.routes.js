@@ -1,27 +1,25 @@
 // backend/src/routes/upload.routes.js
-// Upload de imagens com Multer
+// Upload de imagens — agora salva no Supabase Storage (permanente, não some no restart do Render)
 
 const express = require("express");
 const multer  = require("multer");
 const path    = require("path");
-const fs      = require("fs");
+const { createClient } = require("@supabase/supabase-js");
 const { authenticate } = require("../middleware/auth");
 const { asyncHandler } = require("../middleware/errorHandler");
 
 const router = express.Router();
 
-// ── Garante que a pasta uploads existe ────────────────────────────
-const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// ── Cliente Supabase (usa a service key — acesso total ao Storage) ─
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
-// ── Storage: salva no disco com nome único ────────────────────────
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename:    (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}${path.extname(file.originalname).toLowerCase()}`);
-  },
-});
+const BUCKET = "uploads";
+
+// ── Storage: mantém o arquivo em memória (buffer), não grava em disco ─
+const storage = multer.memoryStorage();
 
 // ── Filtro: só imagens ────────────────────────────────────────────
 const fileFilter = (_req, file, cb) => {
@@ -42,7 +40,7 @@ const upload = multer({
 });
 
 // ── POST /api/upload ──────────────────────────────────────────────
-// Requer autenticação. Retorna { url, filename }
+// Requer autenticação. Sobe o arquivo pro Supabase Storage e retorna { url, filename }
 router.post(
   "/",
   authenticate,
@@ -62,8 +60,26 @@ router.post(
     if (!req.file) {
       return res.status(400).json({ error: "Nenhum arquivo enviado. Use o campo 'file'." });
     }
-    const url = `/uploads/${req.file.filename}`;
-    res.status(201).json({ url, filename: req.file.filename, size: req.file.size });
+
+    const unique   = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const filename = `${unique}${path.extname(req.file.originalname).toLowerCase()}`;
+
+    // ── Sobe o buffer direto pro bucket do Supabase ─────────────────
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET)
+      .upload(filename, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      return res.status(500).json({ error: "Erro ao enviar imagem: " + uploadError.message });
+    }
+
+    // ── Pega a URL pública permanente do arquivo ────────────────────
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(filename);
+
+    res.status(201).json({ url: data.publicUrl, filename, size: req.file.size });
   })
 );
 
@@ -73,13 +89,13 @@ router.delete(
   authenticate,
   asyncHandler(async (req, res) => {
     const filename = path.basename(req.params.filename); // evita path traversal
-    const filepath = path.join(UPLOAD_DIR, filename);
 
-    if (!fs.existsSync(filepath)) {
-      return res.status(404).json({ error: "Arquivo não encontrado" });
+    const { error } = await supabase.storage.from(BUCKET).remove([filename]);
+
+    if (error) {
+      return res.status(500).json({ error: "Erro ao remover imagem: " + error.message });
     }
 
-    fs.unlinkSync(filepath);
     res.json({ message: "Arquivo removido" });
   })
 );
