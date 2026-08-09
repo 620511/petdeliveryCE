@@ -228,7 +228,7 @@ const getProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   const store = await getMyStore(req.user.id);
   const {
-    name, description, address, phone,
+    name, description, address, phone, logo_url,
     is_open, isOpen, delivery_fee, deliveryFee,
     delivery_time_min, deliveryTimeMin,
     delivery_time_max, deliveryTimeMax,
@@ -240,6 +240,7 @@ const updateProfile = async (req, res) => {
   if (description   !== undefined) data.description     = description;
   if (address       !== undefined) data.address         = address;
   if (phone         !== undefined) data.phone           = phone;
+  if (logo_url !== undefined) data.logoUrl = logo_url;
   if ((is_open ?? isOpen)             !== undefined) data.isOpen          = is_open ?? isOpen;
   if ((delivery_fee ?? deliveryFee)   !== undefined) data.deliveryFee     = Number(delivery_fee ?? deliveryFee);
   if ((delivery_time_min ?? deliveryTimeMin) !== undefined) data.deliveryTimeMin = Number(delivery_time_min ?? deliveryTimeMin);
