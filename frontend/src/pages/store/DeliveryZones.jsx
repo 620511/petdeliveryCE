@@ -171,7 +171,7 @@ export default function DeliveryZones() {
           onClick={handleGeocode}
           disabled={geocoding}
           style={{
-            padding: "8px 16px", borderRadius: 10, border: "none", fontFamily: "inherit",
+            padding: "8px 16px", borderRadius: 10,  fontFamily: "inherit",
             background: hasCoords ? C.white : C.blue, color: hasCoords ? C.dark : C.white,
             border: `1px solid ${C.border}`, fontWeight: 700, fontSize: 13,
             cursor: geocoding ? "not-allowed" : "pointer", flexShrink: 0,
