@@ -23,44 +23,151 @@ async function geocodeAddress(address) {
 // GET /api/store/dashboard
 const dashboard = async (req, res) => {
   const store = await getMyStore(req.user.id);
-  if (!store) return res.status(404).json({ error: "Loja não encontrada. Configure seu perfil primeiro." });
 
-  const [productsCount, ordersCount, revenueAgg, pendingCount, recentOrders, topProducts] = await Promise.all([
-    prisma.product.count({ where: { storeId: store.id, isActive: true } }),
-    prisma.order.count({ where: { storeId: store.id } }),
-    prisma.order.aggregate({ where: { storeId: store.id, status: "delivered" }, _sum: { total: true } }),
-    prisma.order.count({ where: { storeId: store.id, status: { in: ["pending","confirmed","preparing"] } } }),
-    prisma.order.findMany({
-      where: { storeId: store.id }, take: 10, orderBy: { createdAt: "desc" },
-      select: { id: true, status: true, total: true, paymentMethod: true, createdAt: true,
-        customer: { select: { name: true, phone: true } } },
-    }),
-    prisma.$queryRaw`
-      SELECT p.name, p.emoji, p.price::float, SUM(oi.quantity)::int AS sold
-      FROM order_items oi
-      JOIN products p ON p.id = oi.product_id
-      JOIN orders o   ON o.id = oi.order_id
-      WHERE o.store_id = ${store.id} AND o.status = 'delivered'
-      GROUP BY p.id, p.name, p.emoji, p.price
-      ORDER BY sold DESC LIMIT 5
-    `,
-  ]);
+  if (!store) {
+    return res.status(404).json({
+      error: "Loja não encontrada. Configure seu perfil primeiro.",
+    });
+  }
 
-  res.json({
-    store,
-    stats: {
-      products: productsCount, orders: ordersCount,
-      revenue: revenueAgg._sum.total || 0, pendingOrders: pendingCount,
-    },
-    recentOrders: recentOrders.map((o) => ({
-      id: o.id, status: o.status, total: o.total,
-      payment_method: o.paymentMethod, created_at: o.createdAt,
-      customer_name: o.customer.name, customer_phone: o.customer.phone,
-    })),
-    topProducts,
-  });
+  try {
+    const [
+      productsCount,
+      ordersCount,
+      revenueAgg,
+      pendingCount,
+      recentOrders,
+      deliveredItems,
+    ] = await Promise.all([
+      prisma.product.count({
+        where: {
+          storeId: store.id,
+          isActive: true,
+        },
+      }),
+
+      prisma.order.count({
+        where: {
+          storeId: store.id,
+        },
+      }),
+
+      prisma.order.aggregate({
+        where: {
+          storeId: store.id,
+          status: "delivered",
+        },
+        _sum: {
+          total: true,
+        },
+      }),
+
+      prisma.order.count({
+        where: {
+          storeId: store.id,
+          status: {
+            in: ["pending", "confirmed", "preparing"],
+          },
+        },
+      }),
+
+      prisma.order.findMany({
+        where: {
+          storeId: store.id,
+        },
+        take: 10,
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: {
+          id: true,
+          status: true,
+          total: true,
+          paymentMethod: true,
+          createdAt: true,
+          customer: {
+            select: {
+              name: true,
+              phone: true,
+            },
+          },
+        },
+      }),
+
+      // Busca os itens dos pedidos entregues usando Prisma,
+      // evitando $queryRaw e prepared statements.
+      prisma.orderItem.findMany({
+        where: {
+          order: {
+            storeId: store.id,
+            status: "delivered",
+          },
+          productId: {
+            not: null,
+          },
+        },
+        select: {
+          productId: true,
+          quantity: true,
+          productName: true,
+          productEmoji: true,
+          productPrice: true,
+        },
+      }),
+    ]);
+
+    // Calcula os produtos mais vendidos em memória.
+    const productsMap = new Map();
+
+    for (const item of deliveredItems) {
+      const key = item.productId || item.productName;
+
+      if (!productsMap.has(key)) {
+        productsMap.set(key, {
+          name: item.productName,
+          emoji: item.productEmoji,
+          price: item.productPrice,
+          sold: 0,
+        });
+      }
+
+      productsMap.get(key).sold += item.quantity;
+    }
+
+    const topProducts = Array.from(productsMap.values())
+      .sort((a, b) => b.sold - a.sold)
+      .slice(0, 5);
+
+    res.json({
+      store,
+
+      stats: {
+        products: productsCount,
+        orders: ordersCount,
+        revenue: revenueAgg._sum.total || 0,
+        pendingOrders: pendingCount,
+      },
+
+      recentOrders: recentOrders.map((o) => ({
+        id: o.id,
+        status: o.status,
+        total: o.total,
+        payment_method: o.paymentMethod,
+        created_at: o.createdAt,
+        customer_name: o.customer.name,
+        customer_phone: o.customer.phone,
+      })),
+
+      topProducts,
+    });
+  } catch (err) {
+    console.error("🔥 STORE DASHBOARD ERROR:", err);
+
+    return res.status(500).json({
+      error: "Erro ao carregar dashboard da loja",
+    });
+  }
 };
-
 // GET /api/store/products
 const listProducts = async (req, res) => {
   const store = await getMyStore(req.user.id);
