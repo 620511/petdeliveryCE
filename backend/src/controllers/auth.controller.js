@@ -75,6 +75,14 @@ const login = async (req, res) => {
 
     console.log("3 - Senha validada");
 
+    console.log("DEBUG LOGIN:", {
+  userFound: !!user,
+  valid,
+  isActive: user?.isActive,
+  role: user?.role
+});
+
+
     if (!user || !valid) {
       return res.status(401).json({
         error: "Credenciais inválidas"
