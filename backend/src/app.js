@@ -19,6 +19,9 @@ const deliveryRoutes = require("./routes/delivery.routes"); // FRETE DINÂMICO
 
 const app = express();
 
+// ── Proxy / Render ─────────────────────────────────────────────────
+app.set("trust proxy", 1);
+
 // ── Segurança ──────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }, // permite servir uploads cross-origin
@@ -39,15 +42,27 @@ app.use(cors({
   methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type","Authorization"],
 }));
+
 app.options("*", cors());
 
 // ── Rate Limiting ──────────────────────────────────────────────────
 app.use("/api/", rateLimit({
-  windowMs: 15 * 60 * 1000, max: 300,
+  windowMs: 15 * 60 * 1000,
+  max: 300,
   message: { error: "Muitas requisições. Tente em 15 minutos." },
 }));
-app.use("/api/auth/login",    rateLimit({ windowMs: 15 * 60 * 1000, max: 15, message: { error: "Muitas tentativas de login." } }));
-app.use("/api/auth/register", rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { error: "Muitos cadastros." } }));
+
+app.use("/api/auth/login", rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { error: "Muitas tentativas de login." }
+}));
+
+app.use("/api/auth/register", rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: "Muitos cadastros." }
+}));
 
 // ── Parsing ────────────────────────────────────────────────────────
 app.use(express.json({ limit: "5mb" }));
@@ -64,9 +79,17 @@ app.get("/health", async (_req, res) => {
   try {
     const prisma = require("./config/database");
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: "ok", db: "connected", timestamp: new Date() });
+
+    res.json({
+      status: "ok",
+      db: "connected",
+      timestamp: new Date()
+    });
   } catch {
-    res.status(503).json({ status: "error", db: "disconnected" });
+    res.status(503).json({
+      status: "error",
+      db: "disconnected"
+    });
   }
 });
 
@@ -81,7 +104,11 @@ app.use("/api/ai",       aiRoutes);      // FASE 4
 app.use("/api",          deliveryRoutes); // FRETE DINÂMICO
 
 // ── 404 ────────────────────────────────────────────────────────────
-app.use((req, res) => res.status(404).json({ error: `Rota não encontrada: ${req.method} ${req.path}` }));
+app.use((req, res) => {
+  res.status(404).json({
+    error: `Rota não encontrada: ${req.method} ${req.path}`
+  });
+});
 
 // ── Error Handler ──────────────────────────────────────────────────
 app.use(errorHandler);
