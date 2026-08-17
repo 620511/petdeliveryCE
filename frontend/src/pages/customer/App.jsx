@@ -3,6 +3,7 @@
 // AGRO: filtros de segmento na tela de lojas (Pet, Agro, Jardim, Pecuária)
 // FASE 4: CustomerChatWidget + ProductRecommendations
 // FIX: usa API_ORIGIN (VITE_API_URL) em vez de localhost fixo nas imagens
+// FIX: busca de produtos dentro da loja (StoreProductsScreen)
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -242,12 +243,13 @@ function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClic
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [selCat,  setCat]     = useState(null);
+  const [search,  setSearch]  = useState("");
 
   useEffect(() => {
     setLoading(true);
-    const p = selCat ? { category_id: selCat } : {};
+    const p = { ...(selCat ? { category_id: selCat } : {}), ...(search ? { search } : {}) };
     customerAPI.storeProducts(store.id, p).then(({ data }) => setData(data)).finally(() => setLoading(false));
-  }, [store.id, selCat]);
+  }, [store.id, selCat, search]);
 
   const cartBtn = (
     <button onClick={onCartClick} style={{ background:C.gray, border:"none", borderRadius:12, padding:"7px 11px", cursor:"pointer", position:"relative", fontSize:20 }}>
@@ -272,8 +274,15 @@ function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClic
           {!user && <button onClick={onLoginClick} style={{ background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`, border:"none", borderRadius:10, padding:"6px 12px", fontSize:12, fontWeight:700, cursor:"pointer", color:C.white, fontFamily:"inherit" }}>Entrar</button>}
         </div>
       </div>
+
+      <div style={{ padding: isDesktop ? "16px 32px 0" : "12px 14px 0" }}>
+        <input value={search} onChange={(e)=>setSearch(e.target.value)}
+          placeholder="🔍 Buscar produto nesta loja..."
+          style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none" }}/>
+      </div>
+
       {data?.categories?.length > 0 && (
-        <div style={{ display:"flex", gap:8, padding:"10px 16px", overflowX:"auto", background:C.white, borderBottom:`1px solid ${C.gray}` }}>
+        <div style={{ display:"flex", gap:8, padding:"10px 16px", overflowX:"auto", background:"transparent" }}>
           <button onClick={() => setCat(null)} style={{ flexShrink:0, padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:13, background:!selCat ? `linear-gradient(135deg,${C.primary},${C.primaryDark})` : C.gray, color:!selCat ? C.white : C.textDark }}>Todos</button>
           {data.categories.map((cat) => (
             <button key={cat.id} onClick={() => setCat(cat.id)} style={{ flexShrink:0, padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:13, background:selCat===cat.id ? `linear-gradient(135deg,${C.primary},${C.primaryDark})` : C.gray, color:selCat===cat.id ? C.white : C.textDark }}>
@@ -293,7 +302,10 @@ function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClic
           </div>
         )}
         {!loading && !data?.products?.length && (
-          <div style={{ textAlign:"center", padding:60, color:C.textGray }}><div style={{ fontSize:40, marginBottom:10 }}>🐾</div><div>Nenhum produto disponível</div></div>
+          <div style={{ textAlign:"center", padding:60, color:C.textGray }}>
+            <div style={{ fontSize:40, marginBottom:10 }}>🐾</div>
+            <div>{search ? `Nenhum produto encontrado para "${search}"` : "Nenhum produto disponível"}</div>
+          </div>
         )}
       </div>
       {!loading && data?.products?.length > 0 && (
