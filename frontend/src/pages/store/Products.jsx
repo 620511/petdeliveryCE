@@ -2,9 +2,10 @@
 // ATUALIZADO: usa ImageUpload para fotos dos produtos
 // FASE 4: botão "Gerar com IA" na descrição do produto
 // FIX: usa API_ORIGIN (VITE_API_URL) em vez de localhost fixo nas imagens
+// FIX: adiciona seleção de categoria e subcategoria no formulário
 
 import { useState, useEffect, useCallback } from "react";
-import { storeAPI } from "../../services/api";
+import { storeAPI, customerAPI } from "../../services/api";
 import { API_ORIGIN } from "../../services/api";
 
 // Helper para gerar descrição via Gemini
@@ -21,18 +22,19 @@ import ImageUpload from "../../components/shared/ImageUpload";
 const C = { primary:"#F7931E", primaryDark:"#F15A24", white:"#fff", bg:"#FFF8F2", gray:"#F4F4F4", textDark:"#1E1E2E", textGray:"#6B7280", green:"#10B981", red:"#EF4444" };
 const fmt = (v) => Number(v).toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
 
-const EMPTY = { name:"", description:"", price:"", stock:"", emoji:"🐾", badge:"", image_url:"", unit:"un" };
+const EMPTY = { name:"", description:"", price:"", stock:"", emoji:"🐾", badge:"", image_url:"", unit:"un", category_id:"", subcategory_id:"" };
 
 export default function StoreProducts() {
-  const [products, setProducts] = useState([]);
-  const [total,    setTotal]    = useState(0);
-  const [loading,  setLoading]  = useState(true);
-  const [search,   setSearch]   = useState("");
-  const [modal,    setModal]    = useState(null);
-  const [form,     setForm]     = useState(EMPTY);
-  const [saving,   setSaving]   = useState(false);
-  const [deleting, setDeleting] = useState(null);
-  const [toast,    setToast]    = useState("");
+  const [products,   setProducts]   = useState([]);
+  const [total,      setTotal]      = useState(0);
+  const [loading,    setLoading]    = useState(true);
+  const [search,     setSearch]     = useState("");
+  const [modal,      setModal]      = useState(null);
+  const [form,       setForm]       = useState(EMPTY);
+  const [saving,     setSaving]     = useState(false);
+  const [deleting,   setDeleting]   = useState(null);
+  const [toast,      setToast]      = useState("");
+  const [categories, setCategories] = useState([]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
@@ -47,19 +49,47 @@ export default function StoreProducts() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Carrega categorias + subcategorias disponíveis (uma vez)
+  useEffect(() => {
+    customerAPI.categories()
+      .then(({ data }) => setCategories(data))
+      .catch(() => setCategories([]));
+  }, []);
+
   const openCreate = () => { setForm(EMPTY); setModal("create"); };
   const openEdit   = (p)  => {
-    setForm({ name: p.name, description: p.description||"", price: p.price, stock: p.stock, emoji: p.emoji||"🐾", badge: p.badge||"", image_url: p.imageUrl||"", unit: p.unit||"un" });
+    setForm({
+      name: p.name, description: p.description||"", price: p.price, stock: p.stock,
+      emoji: p.emoji||"🐾", badge: p.badge||"", image_url: p.imageUrl||"", unit: p.unit||"un",
+      category_id: p.categoryId||"", subcategory_id: p.subcategoryId||"",
+    });
     setModal(p);
   };
   const closeModal = () => setModal(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // Ao trocar a categoria, limpa a subcategoria selecionada (evita subcategoria de outra categoria ficar presa)
+  const setCategory = (e) => {
+    const category_id = e.target.value;
+    setForm((f) => ({ ...f, category_id, subcategory_id: "" }));
+  };
+
+  const selectedCategory = categories.find((c) => c.id === form.category_id);
+  const subcategoryOptions = selectedCategory?.subcategories || [];
+
   const save = async () => {
     if (!form.name || !form.price) return;
     setSaving(true);
     try {
-      const payload = { ...form, price: parseFloat(form.price), stock: parseInt(form.stock || 0), image_url: form.image_url || null, unit: form.unit || "un" };
+      const payload = {
+        ...form,
+        price: parseFloat(form.price),
+        stock: parseInt(form.stock || 0),
+        image_url: form.image_url || null,
+        unit: form.unit || "un",
+        category_id: form.category_id || null,
+        subcategory_id: form.subcategory_id || null,
+      };
       if (modal === "create") {
         const { data } = await storeAPI.createProduct(payload);
         setProducts((p) => [data, ...p]);
@@ -136,6 +166,11 @@ export default function StoreProducts() {
               <div style={{ padding:"12px 14px" }}>
                 {p.badge && <div style={{ background:`${C.primary}18`, color:C.primary, fontSize:10, fontWeight:700, borderRadius:6, padding:"2px 8px", display:"inline-block", marginBottom:6 }}>{p.badge}</div>}
                 <div style={{ fontSize:14, fontWeight:800, color:C.textDark, marginBottom:2 }}>{p.name}</div>
+                {(p.category_name || p.subcategory_name) && (
+                  <div style={{ fontSize:10, color:C.primary, fontWeight:700, marginBottom:4 }}>
+                    {[p.category_name, p.subcategory_name].filter(Boolean).join(" › ")}
+                  </div>
+                )}
                 <div style={{ fontSize:11, color:C.textGray, marginBottom:8 }}>{p.description}</div>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
                   <span style={{ fontSize:16, fontWeight:900, color:C.primaryDark }}>{fmt(p.price)}</span>
@@ -194,6 +229,30 @@ export default function StoreProducts() {
                   <input value={form.name} onChange={set("name")} placeholder="Ex: Ração Premium" style={inputStyle} />
                 </div>
               </div>
+
+              {/* Categoria e Subcategoria */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                <div>
+                  <label style={{ fontSize:12, color:C.textGray, fontWeight:700 }}>Categoria</label>
+                  <select value={form.category_id} onChange={setCategory} style={{ ...inputStyle, cursor:"pointer" }}>
+                    <option value="">Selecione...</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize:12, color:C.textGray, fontWeight:700 }}>Subcategoria</label>
+                  <select value={form.subcategory_id} onChange={set("subcategory_id")} disabled={!form.category_id}
+                    style={{ ...inputStyle, cursor: form.category_id ? "pointer" : "not-allowed", opacity: form.category_id ? 1 : 0.6 }}>
+                    <option value="">Selecione...</option>
+                    {subcategoryOptions.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label style={{ fontSize:12, color:C.textGray, fontWeight:700 }}>Descrição</label>
                 {/* FASE 4: botão Gerar com IA */}
