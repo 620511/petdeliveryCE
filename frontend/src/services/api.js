@@ -1,6 +1,7 @@
 // frontend/src/services/api.js
 // FIX: interceptor de refresh com fila de retry correta
 // FIX: remoção de tokens no localStorage ao fazer logout
+// FIX: timeout maior (o Render free tier pode demorar até 50s para "acordar")
 
 import axios from "axios";
 
@@ -8,11 +9,12 @@ import axios from "axios";
 const BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : "/api";
-  export const API_ORIGIN = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
+export const API_ORIGIN = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 const api = axios.create({
   baseURL: BASE,
-  timeout: 15000,
+  timeout: 60000, // 60s — cobre o "cold start" do Render free tier
   headers: { "Content-Type": "application/json" },
 });
 
