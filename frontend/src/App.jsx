@@ -24,7 +24,7 @@ import StorePayouts   from "./pages/store/Payouts";
 import StoreAssistant   from "./pages/store/Assistant";
 import DeliveryZones   from "./pages/store/DeliveryZones";
 
-import CustomerApp from "./pages/customer/App";
+import CustomerApp from "./pages/customer/CustomerApp";
 
 // ── Spinner global ─────────────────────────────────────────────────
 function Spinner() {
