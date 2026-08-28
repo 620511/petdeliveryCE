@@ -74,11 +74,19 @@ function AppHeader({ user, onLoginClick, onLogout, rightSlot }) {
 
 function AuthModal({ onClose, onSuccess }) {
   const { login, register } = useAuth();
-  const [tab,     setTab]     = useState("login");
-  const [name,    setName]    = useState("");
-  const [email,   setEmail]   = useState("");
-  const [phone,   setPhone]   = useState("");
-  const [pass,    setPass]    = useState("");
+  const [tab,        setTab]        = useState("login");
+  const [name,       setName]       = useState("");
+  const [email,      setEmail]      = useState("");
+  const [phone,      setPhone]      = useState("");
+  const [pass,       setPass]       = useState("");
+  // Endereço (cadastro)
+  const [zipCode,      setZipCode]      = useState("");
+  const [street,       setStreet]       = useState("");
+  const [number,       setNumber]       = useState("");
+  const [complement,   setComplement]   = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [city,         setCity]         = useState("");
+  const [state,        setState]        = useState("");
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
 
@@ -90,6 +98,24 @@ function AuthModal({ onClose, onSuccess }) {
         onSuccess(u);
       } else {
         const u = await register({ name, email, phone, password: pass });
+
+        // Se o cliente preencheu o endereço, salva como endereço padrão
+        if (street.trim() && city.trim() && state.trim()) {
+          try {
+            await customerAPI.addAddress({
+              label: "Casa",
+              street: street.trim(),
+              number: number.trim() || null,
+              complement: complement.trim() || null,
+              neighborhood: neighborhood.trim() || null,
+              city: city.trim(),
+              state: state.trim(),
+              zip_code: zipCode.trim(),
+              is_default: true,
+            });
+          } catch { /* endereço é opcional — não bloqueia o cadastro se falhar */ }
+        }
+
         onSuccess(u);
       }
     } catch (e) {
@@ -97,9 +123,11 @@ function AuthModal({ onClose, onSuccess }) {
     } finally { setLoading(false); }
   };
 
+  const inputStyle = { width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10 };
+
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:C.white, borderRadius:20, padding:28, width:"100%", maxWidth:380, boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}>
+      <div style={{ background:C.white, borderRadius:20, padding:28, width:"100%", maxWidth:380, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ display:"flex", gap:8, marginBottom:24 }}>
           {["login","register"].map((t) => (
             <button key={t} onClick={() => { setTab(t); setError(""); }}
@@ -112,16 +140,30 @@ function AuthModal({ onClose, onSuccess }) {
         </div>
         {tab === "register" && (
           <>
-            <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="Seu nome"
-              style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10 }}/>
-            <input value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="Telefone (opcional)"
-              style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10 }}/>
+            <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="Seu nome completo" style={inputStyle}/>
+            <input value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="Telefone / WhatsApp" style={inputStyle}/>
           </>
         )}
-        <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="E-mail" type="email"
-          style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:10 }}/>
-        <input value={pass} onChange={(e)=>setPass(e.target.value)} placeholder="Senha" type="password"
-          style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none", marginBottom:16 }}/>
+        <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="E-mail" type="email" style={inputStyle}/>
+        <input value={pass} onChange={(e)=>setPass(e.target.value)} placeholder="Senha" type="password" style={{ ...inputStyle, marginBottom: tab === "register" ? 18 : 16 }}/>
+
+        {tab === "register" && (
+          <>
+            <div style={{ fontSize:13, fontWeight:800, color:C.textDark, marginBottom:10 }}>📍 Endereço de entrega (opcional)</div>
+            <input value={zipCode} onChange={(e)=>setZipCode(e.target.value)} placeholder="CEP" style={inputStyle}/>
+            <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:8, marginBottom:10 }}>
+              <input value={street} onChange={(e)=>setStreet(e.target.value)} placeholder="Rua / Av." style={{ ...inputStyle, marginBottom:0 }}/>
+              <input value={number} onChange={(e)=>setNumber(e.target.value)} placeholder="Número" style={{ ...inputStyle, marginBottom:0 }}/>
+            </div>
+            <input value={complement} onChange={(e)=>setComplement(e.target.value)} placeholder="Complemento (opcional)" style={inputStyle}/>
+            <input value={neighborhood} onChange={(e)=>setNeighborhood(e.target.value)} placeholder="Bairro" style={inputStyle}/>
+            <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:8, marginBottom:16 }}>
+              <input value={city} onChange={(e)=>setCity(e.target.value)} placeholder="Cidade" style={{ ...inputStyle, marginBottom:0 }}/>
+              <input value={state} onChange={(e)=>setState(e.target.value)} placeholder="UF" maxLength={2} style={{ ...inputStyle, marginBottom:0, textTransform:"uppercase" }}/>
+            </div>
+          </>
+        )}
+
         {error && <div style={{ color:C.red, fontSize:13, marginBottom:12, fontWeight:600 }}>{error}</div>}
         <button onClick={submit} disabled={loading} style={{ ...G.btn, opacity: loading ? 0.8 : 1 }}>
           {loading ? "⏳ Aguarde..." : tab === "login" ? "Entrar" : "Criar conta"}
