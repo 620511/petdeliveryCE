@@ -4,6 +4,7 @@
 // FASE 4: CustomerChatWidget + ProductRecommendations
 // FIX: usa API_ORIGIN (VITE_API_URL) em vez de localhost fixo nas imagens
 // FIX: busca de produtos dentro da loja (StoreProductsScreen)
+// FIX: retry automático + mensagem de "conectando" quando o backend está "acordando" (Render free tier)
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -134,16 +135,45 @@ function AuthModal({ onClose, onSuccess }) {
 }
 
 function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogout }) {
-  const [stores,  setStores]  = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search,  setSearch]  = useState("");
-  const [segment, setSegment] = useState("all");
+  const [stores,   setStores]   = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [search,   setSearch]   = useState("");
+  const [segment,  setSegment]  = useState("all");
+  const [waking,   setWaking]   = useState(false); // true quando a 1ª tentativa falha e estamos tentando de novo
+  const [failed,   setFailed]   = useState(false); // true se todas as tentativas falharem
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    customerAPI.stores(search ? { search } : {})
-      .then(({ data }) => setStores(data))
-      .finally(() => setLoading(false));
+    setFailed(false);
+    setWaking(false);
+
+    // Mostra "conectando ao servidor" se a resposta demorar mais de 4s (sinal de que o backend estava dormindo)
+    const wakingTimer = setTimeout(() => { if (!cancelled) setWaking(true); }, 4000);
+
+    const attempt = async (retriesLeft) => {
+      try {
+        const { data } = await customerAPI.stores(search ? { search } : {});
+        if (cancelled) return;
+        setStores(data);
+        setLoading(false);
+        setWaking(false);
+      } catch (err) {
+        if (cancelled) return;
+        if (retriesLeft > 0) {
+          // Backend provavelmente ainda estava "acordando" — tenta de novo
+          setTimeout(() => attempt(retriesLeft - 1), 3000);
+        } else {
+          setLoading(false);
+          setWaking(false);
+          setFailed(true);
+        }
+      }
+    };
+
+    attempt(3); // até 3 tentativas extras (cobre bem o cold start do Render)
+
+    return () => { cancelled = true; clearTimeout(wakingTimer); };
   }, [search]);
 
   const filtered = segment === "all" ? stores : stores.filter((s) => {
@@ -185,8 +215,23 @@ function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogou
         </div>
 
         {loading ? (
-          <div style={{ display:"grid", gap:12 }}>
-            {Array(3).fill(0).map((_,i) => <div key={i} style={{ height:90, background:C.grayMid, borderRadius:16, animation:"pulse 1.5s infinite" }}/>)}
+          <div>
+            {waking && (
+              <div style={{ textAlign:"center", padding:"20px 16px", color:C.primary, fontWeight:700, fontSize:14 }}>
+                ⏳ Conectando ao servidor... isso pode levar até 1 minuto na primeira vez
+              </div>
+            )}
+            <div style={{ display:"grid", gap:12 }}>
+              {Array(3).fill(0).map((_,i) => <div key={i} style={{ height:90, background:C.grayMid, borderRadius:16, animation:"pulse 1.5s infinite" }}/>)}
+            </div>
+          </div>
+        ) : failed ? (
+          <div style={{ textAlign:"center", padding:60, color:C.textGray }}>
+            <div style={{ fontSize:48 }}>😕</div>
+            <div style={{ fontWeight:700, marginTop:12, marginBottom:16 }}>Não foi possível conectar ao servidor</div>
+            <button onClick={() => setSearch((s) => s)} style={{ background:`linear-gradient(135deg,${C.primary},${C.primaryDark})`, border:"none", borderRadius:10, padding:"10px 24px", color:C.white, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+              🔄 Tentar novamente
+            </button>
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign:"center", padding:60, color:C.textGray }}>
@@ -240,16 +285,25 @@ function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogou
 }
 
 function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClick, isDesktop, user, onLoginClick, onLogout }) {
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [selCat,  setCat]     = useState(null);
-  const [search,  setSearch]  = useState("");
+  const [data,     setData]     = useState(null);
+  const [loading,  setLoading]  = useState(true);
+  const [selCat,   setCat]      = useState(null);
+  const [selSubCat,setSubCat]   = useState(null);
+  const [search,   setSearch]   = useState("");
 
   useEffect(() => {
     setLoading(true);
-    const p = { ...(selCat ? { category_id: selCat } : {}), ...(search ? { search } : {}) };
+    const p = {
+      ...(selCat    ? { category_id: selCat }       : {}),
+      ...(selSubCat ? { subcategory_id: selSubCat } : {}),
+      ...(search    ? { search }                    : {}),
+    };
     customerAPI.storeProducts(store.id, p).then(({ data }) => setData(data)).finally(() => setLoading(false));
-  }, [store.id, selCat, search]);
+  }, [store.id, selCat, selSubCat, search]);
+
+  // Ao trocar de categoria, limpa a subcategoria selecionada
+  const selectCategory = (id) => { setCat(id); setSubCat(null); };
+  const currentSubcategories = selCat ? (data?.categories?.find((c) => c.id === selCat)?.subcategories || []) : [];
 
   const cartBtn = (
     <button onClick={onCartClick} style={{ background:C.gray, border:"none", borderRadius:12, padding:"7px 11px", cursor:"pointer", position:"relative", fontSize:20 }}>
@@ -283,10 +337,22 @@ function StoreProductsScreen({ store, onBack, onAddToCart, cartCount, onCartClic
 
       {data?.categories?.length > 0 && (
         <div style={{ display:"flex", gap:8, padding:"10px 16px", overflowX:"auto", background:"transparent" }}>
-          <button onClick={() => setCat(null)} style={{ flexShrink:0, padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:13, background:!selCat ? `linear-gradient(135deg,${C.primary},${C.primaryDark})` : C.gray, color:!selCat ? C.white : C.textDark }}>Todos</button>
+          <button onClick={() => selectCategory(null)} style={{ flexShrink:0, padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:13, background:!selCat ? `linear-gradient(135deg,${C.primary},${C.primaryDark})` : C.gray, color:!selCat ? C.white : C.textDark }}>Todos</button>
           {data.categories.map((cat) => (
-            <button key={cat.id} onClick={() => setCat(cat.id)} style={{ flexShrink:0, padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:13, background:selCat===cat.id ? `linear-gradient(135deg,${C.primary},${C.primaryDark})` : C.gray, color:selCat===cat.id ? C.white : C.textDark }}>
+            <button key={cat.id} onClick={() => selectCategory(cat.id)} style={{ flexShrink:0, padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:13, background:selCat===cat.id ? `linear-gradient(135deg,${C.primary},${C.primaryDark})` : C.gray, color:selCat===cat.id ? C.white : C.textDark }}>
               {cat.emoji} {cat.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Subcategorias da categoria selecionada */}
+      {selCat && currentSubcategories.length > 0 && (
+        <div style={{ display:"flex", gap:6, padding:"0 16px 10px", overflowX:"auto", background:"transparent" }}>
+          <button onClick={() => setSubCat(null)} style={{ flexShrink:0, padding:"5px 12px", borderRadius:16, border:`1.5px solid ${!selSubCat ? C.primary : C.grayMid}`, cursor:"pointer", fontFamily:"inherit", fontWeight:600, fontSize:12, background: !selSubCat ? `${C.primary}18` : "transparent", color: !selSubCat ? C.primary : C.textGray }}>Todas</button>
+          {currentSubcategories.map((sub) => (
+            <button key={sub.id} onClick={() => setSubCat(sub.id)} style={{ flexShrink:0, padding:"5px 12px", borderRadius:16, border:`1.5px solid ${selSubCat===sub.id ? C.primary : C.grayMid}`, cursor:"pointer", fontFamily:"inherit", fontWeight:600, fontSize:12, background: selSubCat===sub.id ? `${C.primary}18` : "transparent", color: selSubCat===sub.id ? C.primary : C.textGray }}>
+              {sub.name}
             </button>
           ))}
         </div>
@@ -441,7 +507,7 @@ function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack,
 }
 
 function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }) {
-  const [payment, setPayment] = useState("pix");
+  const [payment, setPayment] = useState("mercadopago");
   const [address, setAddress] = useState("Rua das Flores, 123");
   const [placing, setPlacing] = useState(false);
   const [done,    setDone]    = useState(null);
@@ -475,10 +541,6 @@ function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }
   );
 
   const payOpts = [
-    { id:"pix",         label:"PIX ⚡",         sub:"Imediato" },
-    { id:"credit_card", label:"Crédito 💳",      sub:"Até 12x" },
-    { id:"debit_card",  label:"Débito 🏦",       sub:"Rápido" },
-    { id:"cash",        label:"Dinheiro 💵",     sub:"Na entrega" },
     { id:"mercadopago", label:"Mercado Pago 🛒", sub:"Cartão, Pix, Saldo" },
   ];
 
@@ -494,7 +556,7 @@ function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }
             </div>
             <div style={{ ...G.card, padding:20 }}>
               <div style={{ fontWeight:800, marginBottom:12 }}>💳 Forma de Pagamento</div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:8 }}>
                 {payOpts.map((o) => (
                   <button key={o.id} onClick={() => setPayment(o.id)}
                     style={{ background: payment===o.id ? `${C.primary}18` : C.gray, border: payment===o.id ? `2px solid ${C.primary}` : "2px solid transparent", borderRadius:12, padding:"12px 10px", cursor:"pointer", fontFamily:"inherit", textAlign:"left", transition:"all .15s" }}>
