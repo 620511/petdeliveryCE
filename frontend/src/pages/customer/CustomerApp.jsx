@@ -15,6 +15,7 @@ import { useSocket } from "../../hooks/useSocket";
 import PWAInstallBanner from "../../components/shared/PWAInstallBanner";
 import CustomerChatWidget     from "../../components/ai/CustomerChatWidget";
 import ProductRecommendations from "../../components/ai/ProductRecommendations";
+import ChangePasswordCard     from "../../components/shared/ChangePasswordCard";
 
 const C = {
   primary:"#F7931E", primaryDark:"#F15A24", dark:"#333",
@@ -48,7 +49,7 @@ const STATUS_COLORS = { pending:"#F59E0B", confirmed:C.primary, preparing:"#3B82
 const STATUS_LABELS = { pending:"⏳ Aguardando confirmação", confirmed:"✅ Confirmado!", preparing:"👨‍🍳 Sendo preparado", on_the_way:"🚴 Saiu para entrega!", delivered:"📦 Entregue!", cancelled:"❌ Cancelado" };
 const STATUS_STEPS  = ["pending","confirmed","preparing","on_the_way","delivered"];
 
-function AppHeader({ user, onLoginClick, onLogout, rightSlot }) {
+function AppHeader({ user, onLoginClick, onLogout, onAccountClick, rightSlot }) {
   return (
     <div style={G.header}>
       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -60,6 +61,7 @@ function AppHeader({ user, onLoginClick, onLogout, rightSlot }) {
         {user ? (
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <span style={{ fontSize:13, color:C.textGray, fontWeight:600 }}>Olá, {user.name?.split(" ")[0]}</span>
+            <button onClick={onAccountClick} title="Minha Conta" style={{ background:"transparent", border:`1.5px solid ${C.grayMid}`, borderRadius:10, padding:"5px 9px", fontSize:14, cursor:"pointer", color:C.textGray, fontFamily:"inherit" }}>⚙️</button>
             <button onClick={onLogout} style={{ background:"transparent", border:`1.5px solid ${C.grayMid}`, borderRadius:10, padding:"5px 10px", fontSize:12, cursor:"pointer", color:C.textGray, fontFamily:"inherit" }}>Sair</button>
           </div>
         ) : (
@@ -176,7 +178,7 @@ function AuthModal({ onClose, onSuccess }) {
   );
 }
 
-function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogout }) {
+function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogout, onAccountClick }) {
   const [stores,   setStores]   = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [search,   setSearch]   = useState("");
@@ -227,7 +229,7 @@ function StoreListScreen({ onSelectStore, isDesktop, user, onLoginClick, onLogou
 
   return (
     <div style={{ ...G.screen, paddingBottom: isDesktop ? 40 : 80 }}>
-      <AppHeader user={user} onLoginClick={onLoginClick} onLogout={onLogout} />
+      <AppHeader user={user} onLoginClick={onLoginClick} onLogout={onLogout} onAccountClick={onAccountClick} />
       <div style={{ padding: isDesktop ? "24px 32px" : "16px" }}>
         <div style={{ fontSize: isDesktop ? 24 : 20, fontWeight:900, color:C.textDark, marginBottom:12 }}>Escolha uma loja 🏪</div>
 
@@ -549,11 +551,51 @@ function CartScreen({ cart, onAdd, onRemove, onDelete, cartTotal, store, onBack,
 }
 
 function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }) {
-  const [payment, setPayment] = useState("mercadopago");
-  const [address, setAddress] = useState("Rua das Flores, 123");
-  const [placing, setPlacing] = useState(false);
-  const [done,    setDone]    = useState(null);
-  const frete = cartTotal >= 99 ? 0 : (store?.delivery_fee ?? 8.9);
+  const [payment,      setPayment]      = useState("mercadopago");
+  const [address,      setAddress]      = useState("");       // texto exibido/editável
+  const [addressLoaded,setAddressLoaded]= useState(false);
+  const [placing,      setPlacing]      = useState(false);
+  const [done,         setDone]         = useState(null);
+
+  // Coordenadas do cliente + cálculo de frete real (por distância, igual ao carrinho)
+  const [coords,       setCoords]       = useState(null); // { lat, lng }
+  const [freteInfo,    setFreteInfo]    = useState(null);
+  const [calcLoading,  setCalcLoading]  = useState(false);
+  const freteOutOfRange = freteInfo?.out_of_range ?? false;
+  const frete = freteInfo?.out_of_range ? 0 : (freteInfo?.fee ?? store?.delivery_fee ?? 8.9);
+
+  // ── Carrega o endereço salvo do cliente (deixa em branco se não tiver nenhum) ──
+  useEffect(() => {
+    customerAPI.addresses()
+      .then(({ data }) => {
+        const def = data.find((a) => a.isDefault) || data[0];
+        if (def) {
+          const formatted = [def.street, def.number, def.neighborhood, [def.city, def.state].filter(Boolean).join("/")]
+            .filter(Boolean).join(", ");
+          setAddress(formatted);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setAddressLoaded(true));
+  }, []);
+
+  // ── Calcula o frete real com a localização do navegador (igual ao carrinho) ──
+  const calcFrete = async () => {
+    if (!store?.id) return;
+    setCalcLoading(true);
+    try {
+      const pos = await new Promise((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 })
+      );
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      setCoords({ lat, lng });
+      const { data } = await customerAPI.calcDeliveryFee(store.id, { customer_lat: lat, customer_lng: lng });
+      setFreteInfo(data);
+    } catch { /* sem permissão de localização — usa o frete fixo da loja como fallback */ }
+    finally { setCalcLoading(false); }
+  };
+
+  useEffect(() => { calcFrete(); }, [store?.id]);
 
   const place = async () => {
     setPlacing(true);
@@ -561,6 +603,8 @@ function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }
       const { data: order } = await customerAPI.createOrder({
         store_id: store.id, payment_method: payment, delivery_address: address,
         items: cart.map((i) => ({ product_id: i.id, quantity: i.qty })),
+        // Envia a localização do cliente para o frete por distância ser aplicado de verdade
+        ...(coords ? { customer_lat: coords.lat, customer_lng: coords.lng } : {}),
       });
       if (payment === "mercadopago") {
         const { data: payData } = await customerAPI.createPayment(order.id);
@@ -594,7 +638,15 @@ function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }
           <div>
             <div style={{ ...G.card, padding:20, marginBottom:14 }}>
               <div style={{ fontWeight:800, marginBottom:12 }}>📍 Endereço de Entrega</div>
-              <input value={address} onChange={(e)=>setAddress(e.target.value)} style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none" }}/>
+              <input value={address} onChange={(e)=>setAddress(e.target.value)}
+                placeholder={addressLoaded ? "Digite seu endereço completo" : "Carregando..."}
+                style={{ width:"100%", boxSizing:"border-box", padding:"11px 13px", borderRadius:12, border:`2px solid ${C.grayMid}`, fontSize:14, fontFamily:"inherit", outline:"none" }}/>
+              <div style={{ fontSize:12, color:C.textGray, marginTop:8 }}>
+                {calcLoading ? "📡 Calculando frete pela sua localização..." :
+                 freteInfo?.out_of_range ? "❌ Fora da área de entrega desta loja" :
+                 coords ? `📍 Frete calculado: ${fmt(frete)}${freteInfo?.distance_km ? ` (${freteInfo.distance_km.toFixed(1)} km)` : ""}` :
+                 "⚠️ Permita a localização no navegador para calcular o frete automaticamente"}
+              </div>
             </div>
             <div style={{ ...G.card, padding:20 }}>
               <div style={{ fontWeight:800, marginBottom:12 }}>💳 Forma de Pagamento</div>
@@ -613,11 +665,16 @@ function CheckoutScreen({ cart, store, cartTotal, onBack, onSuccess, isDesktop }
             <div style={{ ...G.card, padding:20, position: isDesktop ? "sticky" : "static", top:80 }}>
               <div style={{ fontWeight:800, marginBottom:14 }}>📋 Resumo</div>
               {cart.map((i) => <div key={i.id} style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:6 }}><span style={{ color:C.textGray }}>{i.qty}x {i.name}</span><span style={{ fontWeight:700 }}>{fmt(i.price*i.qty)}</span></div>)}
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginTop:6, paddingTop:6, borderTop:`1px dashed ${C.grayMid}` }}>
+                <span style={{ color:C.textGray }}>Frete</span>
+                <span style={{ fontWeight:700 }}>{calcLoading ? "..." : freteOutOfRange ? "—" : fmt(frete)}</span>
+              </div>
               <div style={{ borderTop:`2px dashed ${C.grayMid}`, paddingTop:10, marginTop:6, display:"flex", justifyContent:"space-between", fontWeight:900, fontSize:17 }}>
                 <span>Total</span><span style={{ color:C.primaryDark }}>{fmt(cartTotal+frete)}</span>
               </div>
-              <button style={{ ...G.btn, marginTop:16, opacity: placing ? 0.8 : 1 }} onClick={place} disabled={placing}>
-                {placing ? "⏳ Processando..." : `🚀 Confirmar • ${fmt(cartTotal+frete)}`}
+              <button style={{ ...G.btn, marginTop:16, opacity: (placing || freteOutOfRange || !address.trim()) ? 0.6 : 1, cursor: (placing || freteOutOfRange || !address.trim()) ? "not-allowed" : "pointer" }}
+                onClick={place} disabled={placing || freteOutOfRange || !address.trim()}>
+                {placing ? "⏳ Processando..." : freteOutOfRange ? "❌ Fora da área de entrega" : !address.trim() ? "Informe o endereço" : `🚀 Confirmar • ${fmt(cartTotal+frete)}`}
               </button>
             </div>
           </div>
@@ -773,6 +830,22 @@ function OrdersScreen({ onBack, onTrack, isDesktop, user, onLoginClick }) {
   );
 }
 
+function AccountScreen({ onBack, isDesktop, user, onLoggedOut }) {
+  return (
+    <div style={{ ...G.screen, paddingBottom: isDesktop ? 40 : 80 }}>
+      <div style={G.header}><button onClick={onBack} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer" }}>←</button><span style={{ fontSize:16, fontWeight:800 }}>👤 Minha Conta</span><div style={{ width:30 }}/></div>
+      <div style={{ padding: isDesktop ? "24px 32px" : "14px", maxWidth:460 }}>
+        <div style={{ ...G.card, padding:20, marginBottom:16 }}>
+          <div style={{ fontSize:15, fontWeight:800, color:C.textDark }}>{user?.name}</div>
+          <div style={{ fontSize:13, color:C.textGray, marginTop:2 }}>{user?.email}</div>
+          {user?.phone && <div style={{ fontSize:13, color:C.textGray, marginTop:2 }}>{user.phone}</div>}
+        </div>
+        <ChangePasswordCard onLoggedOut={onLoggedOut} />
+      </div>
+    </div>
+  );
+}
+
 function BottomNav({ screen, onTab, cartCount }) {
   const tabs = [
     { id:"stores",  label:"Lojas",    icon:"🏠" },
@@ -844,7 +917,7 @@ export default function CustomerApp() {
     setScreen(tab);
   };
 
-  const commonProps = { isDesktop, cartCount, user, onLoginClick: handleLoginClick, onLogout: handleLogout, onCartClick:()=>setScreen("cart") };
+  const commonProps = { isDesktop, cartCount, user, onLoginClick: handleLoginClick, onLogout: handleLogout, onCartClick:()=>setScreen("cart"), onAccountClick:()=>setScreen("account") };
 
   const renderScreen = () => {
     if (screen==="stores")   return <StoreListScreen onSelectStore={(s)=>{ setSelStore(s); setCart([]); setScreen("products"); }} {...commonProps}/>;
@@ -853,6 +926,7 @@ export default function CustomerApp() {
     if (screen==="checkout" && selStore) return <CheckoutScreen cart={cart} store={selStore} cartTotal={cartTotal} onBack={()=>setScreen("cart")} onSuccess={(id)=>{ setCart([]); setTrackingId(id); setScreen("tracking"); }} {...commonProps}/>;
     if (screen==="tracking") return <OrderTrackingScreen orderId={trackingId} onBack={()=>setScreen("orders")} {...commonProps}/>;
     if (screen==="orders")   return <OrdersScreen onBack={()=>setScreen("stores")} onTrack={(id)=>{ setTrackingId(id); setScreen("tracking"); }} {...commonProps}/>;
+    if (screen==="account")  return <AccountScreen onBack={()=>setScreen("stores")} isDesktop={isDesktop} user={user} onLoggedOut={handleLogout}/>;
     return <StoreListScreen onSelectStore={(s)=>{ setSelStore(s); setCart([]); setScreen("products"); }} {...commonProps}/>;
   };
 
@@ -884,7 +958,10 @@ export default function CustomerApp() {
                 </div>
               </button>
               {user ? (
-                <button onClick={handleLogout} style={{ width:"100%", background:"transparent", border:"none", padding:"8px", color:C.textGray, fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}>Sair →</button>
+                <>
+                  <button onClick={()=>setScreen("account")} style={{ width:"100%", background:"transparent", border:"none", padding:"8px", color:C.textGray, fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:600, textAlign:"left" }}>⚙️ Minha Conta</button>
+                  <button onClick={handleLogout} style={{ width:"100%", background:"transparent", border:"none", padding:"8px", color:C.textGray, fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight:600, textAlign:"left" }}>Sair →</button>
+                </>
               ) : (
                 <button onClick={handleLoginClick} style={{ ...G.btn, fontSize:13, padding:"10px" }}>Entrar / Cadastrar</button>
               )}
@@ -895,7 +972,7 @@ export default function CustomerApp() {
       ) : (
         <div style={{ maxWidth:430, margin:"0 auto", minHeight:"100vh", background:C.bg, position:"relative" }}>
           {renderScreen()}
-          {!["checkout","tracking"].includes(screen) && <BottomNav screen={screen} onTab={goTab} cartCount={cartCount}/>}
+          {!["checkout","tracking","account"].includes(screen) && <BottomNav screen={screen} onTab={goTab} cartCount={cartCount}/>}
           <PWAInstallBanner />
           <CustomerChatWidget storeId={selStore?.id || null} />
         </div>
