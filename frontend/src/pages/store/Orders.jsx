@@ -32,6 +32,51 @@ export default function StoreOrders() {
   const [toast,    setToast]    = useState(null);
   const storeIdRef = useRef(null);
   const toastTimer = useRef(null);
+  const audioCtxRef = useRef(null);
+
+  // ── Alerta sonoro de novo pedido ──────────────────────────────────
+  // Navegadores só permitem tocar som depois de alguma interação do usuário
+  // na página, então "destravamos" o áudio no primeiro clique.
+  useEffect(() => {
+    const unlock = () => {
+      if (!audioCtxRef.current) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) audioCtxRef.current = new AC();
+      }
+      audioCtxRef.current?.resume?.();
+      window.removeEventListener("click", unlock);
+    };
+    window.addEventListener("click", unlock);
+    return () => window.removeEventListener("click", unlock);
+  }, []);
+
+  const playOrderAlert = () => {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new AC();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume();
+
+      // Dois "bips" curtos (dó agudo → sol agudo), estilo campainha
+      const beep = (freq, startTime, duration) => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.3, startTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+      const now = ctx.currentTime;
+      beep(880, now, 0.18);
+      beep(1175, now + 0.22, 0.22);
+    } catch { /* ambiente sem suporte a áudio — ignora silenciosamente */ }
+  };
 
   const showToast = (msg, type = "info") => {
     setToast({ msg, type });
@@ -73,6 +118,7 @@ export default function StoreOrders() {
 
   useEffect(() => {
     const unsub = on("order:new", (payload) => {
+      playOrderAlert();
       showToast(`🛒 Novo pedido de ${payload.customerName} — ${fmt(payload.total)}`, "success");
       setNewCount((n) => n + 1);
       // Recarrega lista se estiver na aba "Todos" ou "Aguardando"
