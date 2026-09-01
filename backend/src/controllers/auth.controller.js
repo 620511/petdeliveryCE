@@ -180,4 +180,29 @@ const me = async (req, res) => {
   res.json(user);
 };
 
-module.exports = { register, login, refresh, logout, me };
+// PUT /api/auth/change-password
+// Funciona para qualquer tipo de conta (admin, lojista, cliente) — usa o usuário autenticado
+const changePassword = async (req, res) => {
+  const { current_password, new_password } = req.body;
+
+  if (!current_password || !new_password)
+    return res.status(400).json({ error: "Senha atual e nova senha são obrigatórias" });
+  if (new_password.length < 6)
+    return res.status(400).json({ error: "A nova senha deve ter no mínimo 6 caracteres" });
+
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+
+  const valid = await bcrypt.compare(current_password, user.passwordHash);
+  if (!valid) return res.status(401).json({ error: "Senha atual incorreta" });
+
+  const passwordHash = await bcrypt.hash(new_password, 12);
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+
+  // Invalida todas as sessões antigas por segurança — obriga a logar de novo com a senha nova
+  await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+
+  res.json({ message: "Senha alterada com sucesso" });
+};
+
+module.exports = { register, login, refresh, logout, me, changePassword };

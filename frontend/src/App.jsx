@@ -15,6 +15,7 @@ import AdminOrders    from "./pages/admin/Orders";
 import AdminReports   from "./pages/admin/Reports";
 import AdminPayouts   from "./pages/admin/Payouts";
 import AdminAssistant from "./pages/admin/Assistant";
+import AdminAccount   from "./pages/admin/Account";
 
 import StoreDashboard from "./pages/store/Dashboard";
 import StoreProducts  from "./pages/store/Products";
@@ -87,6 +88,7 @@ function AppRoutes() {
         <Route path="reports" element={<AdminReports />} />
         <Route path="payouts"    element={<AdminPayouts />} />
         <Route path="assistant"  element={<AdminAssistant />} />
+        <Route path="account"    element={<AdminAccount />} />
       </Route>
 
       {/* ── LOJISTA ────────────────────────────────────────── */}

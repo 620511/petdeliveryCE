@@ -12,6 +12,7 @@ const nav = [
   { to:"/admin/reports",   label:"Relatórios",  icon:"📈" },
   { to:"/admin/payouts",   label:"Repasses",    icon:"💸" },   // Fase 3
   { to:"/admin/assistant", label:"Assistente IA", icon:"🤖" }, // FASE 4
+  { to:"/admin/account",   label:"Minha Conta",  icon:"👤" },
 ];
 
 export default function AdminLayout() {

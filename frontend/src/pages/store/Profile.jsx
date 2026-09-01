@@ -4,6 +4,8 @@
 import { useState, useEffect } from "react";
 import { storeAPI } from "../../services/api";
 import ImageUpload from "../../components/shared/ImageUpload";
+import ChangePasswordCard from "../../components/shared/ChangePasswordCard";
+import { useAuth } from "../../contexts/AuthContext";
 
 const C = { primary:"#F7931E", primaryDark:"#F15A24", white:"#fff", bg:"#FFF8F2", textDark:"#1E1E2E", textGray:"#6B7280", green:"#10B981", red:"#EF4444" };
 
@@ -21,6 +23,7 @@ const EMPTY = {
 };
 
 export default function StoreProfile() {
+  const { logout } = useAuth();
   const [form,    setForm]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -246,6 +249,10 @@ export default function StoreProfile() {
           >
             {saving ? "⏳ Salvando..." : "💾 Salvar Configurações"}
           </button>
+
+          <div style={{ marginTop:16 }}>
+            <ChangePasswordCard onLoggedOut={logout} />
+          </div>
         </div>
       </div>
     </div>
