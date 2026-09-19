@@ -102,6 +102,21 @@ export const authAPI = {
   changePassword: (d) => api.put("/auth/change-password", d),
 };
 
+// ── Privacidade / LGPD ────────────────────────────────────────────
+export const privacyAPI = {
+  me: () => api.get("/privacy/me"),
+  consents: () => api.get("/privacy/consents"),
+  updateConsent: (d) => api.put("/privacy/consents", d),
+  request: (d) => api.post("/privacy/requests", d),
+  export: () => api.post("/privacy/export"),
+  adminRequests: () => api.get("/privacy/admin/requests"),
+  updateRequest: (id, d) => api.patch(`/privacy/admin/requests/${id}`, d),
+  auditLogs: () => api.get("/privacy/admin/audit-logs"),
+  incidents: () => api.get("/privacy/admin/incidents"),
+  createIncident: (d) => api.post("/privacy/admin/incidents", d),
+  updateIncident: (id, d) => api.patch(`/privacy/admin/incidents/${id}`, d),
+};
+
 // ── Admin ──────────────────────────────────────────────────────────
 export const adminAPI = {
   dashboard:   ()        => api.get("/admin/dashboard"),

@@ -91,6 +91,8 @@ function AuthModal({ onClose, onSuccess }) {
   const [state,        setState]        = useState("");
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   const submit = async () => {
     setError(""); setLoading(true);
@@ -99,7 +101,15 @@ function AuthModal({ onClose, onSuccess }) {
         const u = await login(email, pass);
         onSuccess(u);
       } else {
-        const u = await register({ name, email, phone, password: pass });
+        if (!acceptPrivacy || !acceptTerms) {
+          setError("Aceite a Política de Privacidade e os Termos de Uso para continuar.");
+          return;
+        }
+
+        const u = await register({
+          name, email, phone, password: pass, role: "customer",
+          acceptPrivacy: true, acceptTerms: true, marketingConsent: false,
+        });
 
         // Se o cliente preencheu o endereço, salva como endereço padrão
         if (street.trim() && city.trim() && state.trim()) {
@@ -162,6 +172,16 @@ function AuthModal({ onClose, onSuccess }) {
             <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:8, marginBottom:16 }}>
               <input value={city} onChange={(e)=>setCity(e.target.value)} placeholder="Cidade" style={{ ...inputStyle, marginBottom:0 }}/>
               <input value={state} onChange={(e)=>setState(e.target.value)} placeholder="UF" maxLength={2} style={{ ...inputStyle, marginBottom:0, textTransform:"uppercase" }}/>
+            </div>
+            <div style={{ fontSize:12, color:"#555", display:"grid", gap:8, marginTop:2, marginBottom:12 }}>
+              <label style={{ display:"flex", gap:8, alignItems:"flex-start", cursor:"pointer" }}>
+                <input type="checkbox" checked={acceptPrivacy} onChange={(e)=>setAcceptPrivacy(e.target.checked)} />
+                <span>Li e aceito a <a href="/privacidade" target="_blank" rel="noreferrer">Política de Privacidade</a>.</span>
+              </label>
+              <label style={{ display:"flex", gap:8, alignItems:"flex-start", cursor:"pointer" }}>
+                <input type="checkbox" checked={acceptTerms} onChange={(e)=>setAcceptTerms(e.target.checked)} />
+                <span>Li e aceito os <a href="/termos" target="_blank" rel="noreferrer">Termos de Uso</a>.</span>
+              </label>
             </div>
           </>
         )}
@@ -841,6 +861,7 @@ function AccountScreen({ onBack, isDesktop, user, onLoggedOut }) {
           {user?.phone && <div style={{ fontSize:13, color:C.textGray, marginTop:2 }}>{user.phone}</div>}
         </div>
         <ChangePasswordCard onLoggedOut={onLoggedOut} />
+        <a href="/minha-privacidade" style={{ display:"block", marginTop:12, textDecoration:"none", background:C.white, border:`1px solid ${C.grayMid}`, borderRadius:12, padding:"13px 14px", color:C.textDark, fontWeight:700 }}>🔐 Privacidade e LGPD</a>
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ const customerRoutes = require("./routes/customer.routes");
 const uploadRoutes   = require("./routes/upload.routes");
 const paymentRoutes  = require("./routes/payment.routes"); // Fase 3
 const aiRoutes       = require("./routes/ai.routes");      // FASE 4
+const privacyRoutes = require("./routes/privacy.routes");
 const deliveryRoutes = require("./routes/delivery.routes"); // FRETE DINÂMICO
 
 const app = express();
@@ -95,6 +96,7 @@ app.get("/health", async (_req, res) => {
 
 // ── Rotas API ──────────────────────────────────────────────────────
 app.use("/api/auth",     authRoutes);
+app.use("/api/privacy",  privacyRoutes);
 app.use("/api/admin",    adminRoutes);
 app.use("/api/store",    storeRoutes);
 app.use("/api/customer", customerRoutes);

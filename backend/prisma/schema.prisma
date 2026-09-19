@@ -25,9 +25,89 @@ model User {
   refreshTokens RefreshToken[]
   reviews       Review[]
   store         Store?
+  consents      Consent[]
+  privacyRequests PrivacyRequest[]
+  auditLogs     AuditLog[]
+  reportedIncidents SecurityIncident[] @relation("IncidentReporter")
 
   @@map("users")
 }
+
+model Consent {
+  id              String       @id @default(uuid())
+  userId          String       @map("user_id")
+  type            ConsentType
+  version         String
+  granted         Boolean
+  grantedAt       DateTime?    @map("granted_at")
+  revokedAt       DateTime?    @map("revoked_at")
+  ipAddress       String?      @map("ip_address")
+  userAgent       String?      @map("user_agent")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("consents")
+}
+
+model PrivacyRequest {
+  id              String              @id @default(uuid())
+  userId          String              @map("user_id")
+  type            PrivacyRequestType
+  status          PrivacyRequestStatus @default(pending)
+  description     String?
+  responseNote    String?             @map("response_note")
+  requestedAt     DateTime            @default(now()) @map("requested_at")
+  completedAt     DateTime?           @map("completed_at")
+  dueAt           DateTime?           @map("due_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, requestedAt])
+  @@map("privacy_requests")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  action      String
+  resource    String?
+  resourceId  String?  @map("resource_id")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  details     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([resource, resourceId])
+  @@map("audit_logs")
+}
+
+model SecurityIncident {
+  id             String                  @id @default(uuid())
+  title          String
+  description    String
+  severity       IncidentSeverity        @default(medium)
+  status         IncidentStatus          @default(open)
+  reporterId     String?                 @map("reporter_id")
+  detectedAt     DateTime                @default(now()) @map("detected_at")
+  resolvedAt     DateTime?               @map("resolved_at")
+  containment    String?
+  resolution     String?
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+  reporter       User?                   @relation("IncidentReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+
+  @@index([status, severity])
+  @@index([detectedAt])
+  @@map("security_incidents")
+}
+
 
 model RefreshToken {
   id        String   @id @default(uuid())
@@ -239,6 +319,47 @@ model Review {
 
   @@map("reviews")
 }
+
+enum ConsentType {
+  privacy_policy
+  terms_of_use
+  marketing
+  analytics
+  cookies
+}
+
+enum PrivacyRequestType {
+  access
+  portability
+  correction
+  deletion
+  consent
+  information
+  objection
+}
+
+enum PrivacyRequestStatus {
+  pending
+  in_progress
+  completed
+  rejected
+}
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum IncidentStatus {
+  open
+  investigating
+  contained
+  resolved
+  closed
+}
+
 
 enum Role {
   admin

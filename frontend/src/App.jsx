@@ -16,6 +16,7 @@ import AdminReports   from "./pages/admin/Reports";
 import AdminPayouts   from "./pages/admin/Payouts";
 import AdminAssistant from "./pages/admin/Assistant";
 import AdminAccount   from "./pages/admin/Account";
+import AdminPrivacy    from "./pages/admin/Privacy";
 
 import StoreDashboard from "./pages/store/Dashboard";
 import StoreProducts  from "./pages/store/Products";
@@ -26,6 +27,10 @@ import StoreAssistant   from "./pages/store/Assistant";
 import DeliveryZones   from "./pages/store/DeliveryZones";
 
 import CustomerApp from "./pages/customer/CustomerApp";
+import PrivacyPage from "./pages/legal/Privacy";
+import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
+import Terms from "./pages/legal/Terms";
+import Cookies from "./pages/legal/Cookies";
 
 // ── Spinner global ─────────────────────────────────────────────────
 function Spinner() {
@@ -89,6 +94,7 @@ function AppRoutes() {
         <Route path="payouts"    element={<AdminPayouts />} />
         <Route path="assistant"  element={<AdminAssistant />} />
         <Route path="account"    element={<AdminAccount />} />
+        <Route path="privacy"    element={<AdminPrivacy />} />
       </Route>
 
       {/* ── LOJISTA ────────────────────────────────────────── */}
@@ -111,6 +117,11 @@ function AppRoutes() {
 
       {/* ── CLIENTE — ROTA PÚBLICA (sem login) ──────────────── */}
       <Route path="/app/*" element={<CustomerApp />} />
+
+      <Route path="/privacidade" element={<PrivacyPolicy />} />
+      <Route path="/termos" element={<Terms />} />
+      <Route path="/cookies" element={<Cookies />} />
+      <Route path="/minha-privacidade" element={<RequireRole roles={["customer", "store_owner", "admin"]}><PrivacyPage /></RequireRole>} />
 
       {/* 404 → redireciona para o app */}
       <Route path="*" element={<Navigate to="/app" replace />} />

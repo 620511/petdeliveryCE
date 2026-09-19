@@ -4,8 +4,11 @@
 const bcrypt = require("bcryptjs");
 const jwt    = require("jsonwebtoken");
 const prisma = require("../config/database");
+const { audit } = require("../services/audit.service");
 
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const PRIVACY_POLICY_VERSION = process.env.PRIVACY_POLICY_VERSION || "1.0";
+const TERMS_VERSION = process.env.TERMS_VERSION || "1.0";
 
 const generateTokens = (user) => {
   const payload = { userId: user.id, role: user.role };
@@ -22,22 +25,69 @@ const saveRefreshToken = (userId, token) =>
 
 // POST /api/auth/register
 const register = async (req, res) => {
-  const { name, email, password, role = "customer", phone } = req.body;
+  const { name, email, password, role = "customer", phone, acceptPrivacy, acceptTerms, marketingConsent = false } = req.body;
 
-  if (!name?.trim() || !email?.trim() || !password)
+  const normalizedEmail = email?.trim().toLowerCase();
+  if (!name?.trim() || !normalizedEmail || !password)
     return res.status(400).json({ error: "Nome, e-mail e senha são obrigatórios" });
+  if (!/^\S+@\S+\.\S+$/.test(normalizedEmail))
+    return res.status(400).json({ error: "E-mail inválido" });
   if (password.length < 6)
     return res.status(400).json({ error: "Senha deve ter no mínimo 6 caracteres" });
+  if (acceptPrivacy !== true || acceptTerms !== true)
+    return res.status(400).json({ error: "É necessário aceitar a Política de Privacidade e os Termos de Uso." });
   if (!["customer", "store_owner"].includes(role))
     return res.status(400).json({ error: "Role inválida" });
 
-  const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) return res.status(409).json({ error: "E-mail já cadastrado" });
 
   const passwordHash = await bcrypt.hash(password, 12);
+  const now = new Date();
   const user = await prisma.user.create({
-    data: { name: name.trim(), email: email.toLowerCase(), passwordHash, role, phone: phone || null },
+    data: {
+      name: name.trim(),
+      email: normalizedEmail,
+      passwordHash,
+      role,
+      phone: phone || null,
+      consents: {
+        create: [
+          {
+            type: "privacy_policy",
+            version: PRIVACY_POLICY_VERSION,
+            granted: true,
+            grantedAt: now,
+            ipAddress: req.ip || null,
+            userAgent: req.get("user-agent")?.slice(0, 500) || null,
+          },
+          {
+            type: "terms_of_use",
+            version: TERMS_VERSION,
+            granted: true,
+            grantedAt: now,
+            ipAddress: req.ip || null,
+            userAgent: req.get("user-agent")?.slice(0, 500) || null,
+          },
+          ...(marketingConsent === true ? [{
+            type: "marketing",
+            version: PRIVACY_POLICY_VERSION,
+            granted: true,
+            grantedAt: now,
+            ipAddress: req.ip || null,
+            userAgent: req.get("user-agent")?.slice(0, 500) || null,
+          }] : []),
+        ],
+      },
+    },
     select: { id: true, name: true, email: true, role: true },
+  });
+
+  await audit(req, {
+    action: "AUTH_REGISTER",
+    resource: "user",
+    resourceId: user.id,
+    details: { role: user.role, privacyVersion: PRIVACY_POLICY_VERSION, termsVersion: TERMS_VERSION },
   });
 
   const tokens = generateTokens(user);
@@ -122,6 +172,7 @@ const login = async (req, res) => {
 
     console.log("6 - Login concluído");
 
+    await audit(req, { action: "AUTH_LOGIN_SUCCESS", resource: "user", resourceId: user.id });
     return res.json({
       user: safeUser,
       ...tokens
@@ -167,6 +218,7 @@ const refresh = async (req, res) => {
 const logout = async (req, res) => {
   const { refreshToken } = req.body;
   if (refreshToken) await prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
+  if (req.user?.id) await audit(req, { action: "AUTH_LOGOUT", resource: "user", resourceId: req.user.id });
   res.json({ message: "Logout realizado" });
 };
 
@@ -201,6 +253,7 @@ const changePassword = async (req, res) => {
 
   // Invalida todas as sessões antigas por segurança — obriga a logar de novo com a senha nova
   await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+  await audit(req, { action: "AUTH_PASSWORD_CHANGED", resource: "user", resourceId: user.id });
 
   res.json({ message: "Senha alterada com sucesso" });
 };

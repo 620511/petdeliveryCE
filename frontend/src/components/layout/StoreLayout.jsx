@@ -12,6 +12,7 @@ const nav = [
   { to:"/store/assistant",     label:"Assistente IA", icon:"🤖" },   // FASE 4
   { to:"/store/delivery-zones", label:"Faixas de Frete", icon:"🗺️" }, // FRETE DINÂMICO
   { to:"/store/profile",    label:"Minha Loja",   icon:"🏪" },
+  { to:"/minha-privacidade", label:"Privacidade e LGPD", icon:"🔐" },
 ];
 
 export default function StoreLayout() {

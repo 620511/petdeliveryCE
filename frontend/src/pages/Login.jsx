@@ -44,6 +44,9 @@ export default function LoginPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
 
   const setField = (field) => (event) => {
     setForm((current) => ({
@@ -64,12 +67,20 @@ export default function LoginPage() {
       if (mode === "login") {
         user = await login(form.email, form.password);
       } else {
+        if (!acceptPrivacy || !acceptTerms) {
+          setError("Para criar a conta, aceite a Política de Privacidade e os Termos de Uso.");
+          return;
+        }
+
         user = await register({
           name: form.name,
           email: form.email,
           password: form.password,
           phone: form.phone,
           role,
+          acceptPrivacy: true,
+          acceptTerms: true,
+          marketingConsent,
         });
       }
 
@@ -421,6 +432,23 @@ export default function LoginPage() {
                   C.grayMid;
               }}
             />
+          )}
+
+          {mode === "register" && (
+            <div style={{ fontSize: 12, color: "#555", display: "grid", gap: 8, marginTop: 2 }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+                <input type="checkbox" checked={acceptPrivacy} onChange={(e) => setAcceptPrivacy(e.target.checked)} />
+                <span>Li e aceito a <a href="/privacidade" target="_blank" rel="noreferrer">Política de Privacidade</a>.</span>
+              </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+                <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} />
+                <span>Li e aceito os <a href="/termos" target="_blank" rel="noreferrer">Termos de Uso</a>.</span>
+              </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+                <input type="checkbox" checked={marketingConsent} onChange={(e) => setMarketingConsent(e.target.checked)} />
+                <span>Quero receber novidades e ofertas. <b>(opcional)</b></span>
+              </label>
+            </div>
           )}
 
           {error && (
